@@ -110,27 +110,24 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
                   {expert && display ? (
                     <>
                       <div className="flex items-start gap-4">
-                        <div className="w-16 h-16 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center overflow-hidden shrink-0">
+                        <div className="w-24 h-24 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center overflow-hidden shrink-0">
                           {avatar ? (
                             <img src={avatar} alt={display.alias} className="w-full h-full object-cover" />
                           ) : (
-                            <span className="text-xl text-emerald-800">{display.alias[0]}</span>
+                            <span className="text-3xl text-emerald-800">{display.alias[0]}</span>
                           )}
                         </div>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-semibold text-lg text-gray-950 truncate">{display.alias}</h3>
-                            {expert.has_skill && <span className="text-xs text-emerald-700">persona</span>}
-                          </div>
-                          <p className="text-sm text-emerald-700 mt-1">{display.shortTitle}</p>
+                          <h3 className="font-bold text-lg text-gray-950 truncate">{display.alias}</h3>
+                          <p className="mt-1 text-[15px] font-semibold text-emerald-700">{display.shortTitle}</p>
+                          <p className="text-sm text-gray-600 mt-3 leading-6 truncate">{display.cardIntro}</p>
                         </div>
                       </div>
-                      <p className="text-sm text-gray-600 mt-4 leading-6 line-clamp-2">{display.cardIntro}</p>
-                      <p className="text-xs text-gray-400 mt-3 line-clamp-1">{expert.tagline || display.tagline}</p>
+                      <p className="text-xs text-gray-400 mt-3 leading-5 line-clamp-2">{expert.tagline || display.tagline}</p>
                     </>
                   ) : (
                     <>
-                      <Skeleton className="w-16 h-16 rounded-full mb-4" />
+                      <Skeleton className="w-24 h-24 rounded-full mb-4" />
                       <Skeleton className="w-28 h-4 mb-2" />
                       <Skeleton className="w-40 h-3" />
                     </>
