@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="cartoon gong drum avatar">
+  <defs>
+    <radialGradient id="gong" cx="50%" cy="42%" r="55%">
+      <stop offset="0" stop-color="#fff4b8"/>
+      <stop offset="0.58" stop-color="#f6c34e"/>
+      <stop offset="1" stop-color="#b87416"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="40" x2="216" y1="28" y2="228">
+      <stop stop-color="#9a3412"/>
+      <stop offset="1" stop-color="#431407"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="54" fill="#eff6ff"/>
+  <circle cx="128" cy="132" r="88" fill="url(#rim)"/>
+  <circle cx="128" cy="132" r="72" fill="url(#gong)" stroke="#78350f" stroke-width="8"/>
+  <circle cx="128" cy="132" r="22" fill="#f59e0b" opacity=".48"/>
+  <path d="M76 59c18-24 86-24 104 0" fill="none" stroke="#7f1d1d" stroke-width="10" stroke-linecap="round"/>
+  <path d="M76 214c-21 17-41 13-52-3" fill="none" stroke="#92400e" stroke-width="13" stroke-linecap="round"/>
+  <path d="M180 214c21 17 41 13 52-3" fill="none" stroke="#92400e" stroke-width="13" stroke-linecap="round"/>
+  <circle cx="102" cy="122" r="10" fill="#111827"/>
+  <circle cx="154" cy="122" r="10" fill="#111827"/>
+  <circle cx="106" cy="119" r="3.5" fill="#fff"/>
+  <circle cx="158" cy="119" r="3.5" fill="#fff"/>
+  <path d="M104 158c13 13 35 13 48 0" fill="none" stroke="#7c2d12" stroke-width="8" stroke-linecap="round"/>
+  <path d="M67 119c-19-16-24-31-15-44 9-12 27-10 38 6" fill="none" stroke="#b45309" stroke-width="10" stroke-linecap="round"/>
+  <path d="M189 119c19-16 24-31 15-44-9-12-27-10-38 6" fill="none" stroke="#b45309" stroke-width="10" stroke-linecap="round"/>
+  <path d="M43 43l27 27M213 43l-27 27" stroke="#0f766e" stroke-width="8" stroke-linecap="round"/>
+</svg>

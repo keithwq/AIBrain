@@ -11,7 +11,20 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 3001;
 
-app.use(cors());
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',').map(s => s.trim())
+  : ['http://localhost:5173', 'http://127.0.0.1:5173'];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests without an Origin header, such as local scripts and health checks.
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
+}));
 app.use(express.json());
 
 app.get('/api/v1/health', (_req, res) => {
@@ -23,7 +36,7 @@ app.use('/api/v1/experts', expertsRoutes);
 app.use('/api/v1/chat', chatRoutes);
 app.use('/api/v1/users', usersRoutes);
 
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('Unhandled error:', err);
   res.status(500).json({ error: '服务器内部错误' });
 });
@@ -32,10 +45,10 @@ app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
 
-process.on('unhandledRejection', (reason) => {
+process.on('unhandledRejection', reason => {
   console.error('Unhandled Rejection:', reason);
 });
 
-process.on('uncaughtException', (err) => {
+process.on('uncaughtException', err => {
   console.error('Uncaught Exception:', err);
 });

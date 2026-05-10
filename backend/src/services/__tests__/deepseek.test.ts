@@ -9,6 +9,8 @@ vi.mock('openai', () => {
   return { default: MockOpenAI };
 });
 
+vi.mock('../../config', () => ({ WIKI_BASE: '/mock/wiki' }));
+
 vi.mock('fs');
 vi.mock('path');
 
@@ -56,29 +58,33 @@ describe('loadSkill', () => {
 });
 
 describe('buildSystemPrompt', () => {
-  it('returns skill body without YAML frontmatter', () => {
+  it('includes skill body without YAML frontmatter and expert protocol', () => {
     mockedFs.existsSync.mockReturnValue(true);
     mockedFs.readFileSync.mockReturnValue('---\nid: steve-jobs\n---\n# Steve Jobs\n\nYou are Steve Jobs.');
 
     const result = buildSystemPrompt('steve-jobs');
 
-    expect(result).toBe('# Steve Jobs\n\nYou are Steve Jobs.');
+    expect(result).toContain('# Steve Jobs\n\nYou are Steve Jobs.');
+    expect(result).toContain('当前外脑：乔大爷');
+    expect(result).toContain('专家外脑');
   });
 
-  it('returns full content when no frontmatter', () => {
+  it('includes full content when no frontmatter', () => {
     mockedFs.existsSync.mockReturnValue(true);
     mockedFs.readFileSync.mockReturnValue('# Steve Jobs\n\nDirect content.');
 
     const result = buildSystemPrompt('steve-jobs');
 
-    expect(result).toBe('# Steve Jobs\n\nDirect content.');
+    expect(result).toContain('# Steve Jobs\n\nDirect content.');
+    expect(result).toContain('功能取舍清单');
   });
 
-  it('returns fallback prompt when skill not found', () => {
+  it('uses fallback prompt and default protocol when skill not found', () => {
     mockedFs.existsSync.mockReturnValue(false);
 
     const result = buildSystemPrompt('nonexistent');
 
-    expect(result).toBe('You are a helpful AI assistant.');
+    expect(result).toContain('你是一个有帮助的 AI 助手。');
+    expect(result).toContain('当前外脑：外脑专家');
   });
 });

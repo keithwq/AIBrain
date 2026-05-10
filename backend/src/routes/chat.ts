@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../services/prisma';
 import { generateReply, generateReplyStream } from '../services/deepseek';
+import { refundCredits, reserveCredits } from '../services/credits';
 
 const router = Router();
 
@@ -9,13 +10,16 @@ router.post('/conversations', async (req, res) => {
   if (!user_id || !expert_id) {
     return res.status(400).json({ error: 'user_id and expert_id are required' });
   }
+
   const user = await prisma.user.findUnique({ where: { id: user_id } });
   if (!user) {
     return res.status(404).json({ error: 'user not found' });
   }
+
   const conversation = await prisma.conversation.create({
     data: { userId: user_id, expertId: expert_id, title: title || expert_id },
   });
+
   res.json(conversation);
 });
 
@@ -24,10 +28,12 @@ router.get('/conversations', async (req, res) => {
   if (!user_id) {
     return res.status(400).json({ error: 'user_id is required' });
   }
+
   const conversations = await prisma.conversation.findMany({
     where: { userId: String(user_id) },
     orderBy: { createdAt: 'desc' },
   });
+
   res.json(conversations);
 });
 
@@ -49,9 +55,6 @@ router.post('/conversations/:id/messages', async (req, res) => {
   if (!user) {
     return res.status(404).json({ error: 'user not found' });
   }
-  if (user.dailyQuota <= 0) {
-    return res.status(429).json({ error: 'daily quota exhausted' });
-  }
 
   const conversation = await prisma.conversation.findUnique({
     where: { id: req.params.id },
@@ -60,27 +63,23 @@ router.post('/conversations/:id/messages', async (req, res) => {
     return res.status(404).json({ error: 'conversation not found' });
   }
 
+  const reservedUser = await reserveCredits(user_id);
+  if (!reservedUser) {
+    return res.status(429).json({ error: 'credits exhausted' });
+  }
+
   await prisma.message.create({
     data: { conversationId: req.params.id, role: 'user', content },
   });
 
   const msgCount = await prisma.message.count({ where: { conversationId: req.params.id, role: 'user' } });
   if (msgCount === 1 && conversation.title === conversation.expertId) {
-    const autoTitle = content.length > 30 ? content.slice(0, 30) + '...' : content;
+    const autoTitle = content.length > 30 ? `${content.slice(0, 30)}...` : content;
     await prisma.conversation.update({
       where: { id: req.params.id },
       data: { title: autoTitle },
     });
   }
-
-  await prisma.user.update({
-    where: { id: user_id },
-    data: { dailyQuota: { decrement: 1 } },
-  });
-
-  await prisma.usageLog.create({
-    data: { userId: user_id, expertId: expert_id || conversation.expertId },
-  });
 
   const history = await prisma.message.findMany({
     where: { conversationId: req.params.id },
@@ -99,15 +98,34 @@ router.post('/conversations/:id/messages', async (req, res) => {
     aiContent = '';
   }
 
-  const aiMessage = await prisma.message.create({
-    data: { conversationId: req.params.id, role: 'assistant', content: aiContent || '[暂时无法回复]' },
-  });
+  const titleUpdated = msgCount === 1;
 
   if (!aiContent) {
-    return res.status(503).json({ error: 'AI服务暂时不可用', ai_message: aiMessage, quota_remaining: user.dailyQuota - 1, title_updated: msgCount === 1 });
+    const aiMessage = await prisma.message.create({
+      data: { conversationId: req.params.id, role: 'assistant', content: '[暂时无法回复]' },
+    });
+    await refundCredits(user_id);
+    return res.status(503).json({
+      error: 'AI服务暂时不可用',
+      ai_message: aiMessage,
+      credits_remaining: reservedUser.credits + 1,
+      title_updated: titleUpdated,
+    });
   }
 
-  res.json({ ai_message: aiMessage, quota_remaining: user.dailyQuota - 1, title_updated: msgCount === 1 });
+  const aiMessage = await prisma.message.create({
+    data: { conversationId: req.params.id, role: 'assistant', content: aiContent },
+  });
+
+  await prisma.usageLog.create({
+    data: { userId: user_id, expertId: expert_id || conversation.expertId },
+  });
+
+  res.json({
+    ai_message: aiMessage,
+    credits_remaining: reservedUser.credits,
+    title_updated: titleUpdated,
+  });
 });
 
 router.get('/conversations/:id', async (req, res) => {
@@ -161,9 +179,6 @@ router.get('/conversations/:id/messages/stream', async (req, res) => {
   if (!user) {
     return res.status(404).json({ error: 'user not found' });
   }
-  if (user.dailyQuota <= 0) {
-    return res.status(429).json({ error: 'daily quota exhausted' });
-  }
 
   const conversation = await prisma.conversation.findUnique({
     where: { id: req.params.id },
@@ -172,27 +187,23 @@ router.get('/conversations/:id/messages/stream', async (req, res) => {
     return res.status(404).json({ error: 'conversation not found' });
   }
 
+  const reservedUser = await reserveCredits(String(user_id));
+  if (!reservedUser) {
+    return res.status(429).json({ error: 'credits exhausted' });
+  }
+
   await prisma.message.create({
     data: { conversationId: req.params.id, role: 'user', content: String(content) },
   });
 
   const msgCount = await prisma.message.count({ where: { conversationId: req.params.id, role: 'user' } });
   if (msgCount === 1 && conversation.title === conversation.expertId) {
-    const autoTitle = String(content).length > 30 ? String(content).slice(0, 30) + '...' : String(content);
+    const autoTitle = String(content).length > 30 ? `${String(content).slice(0, 30)}...` : String(content);
     await prisma.conversation.update({
       where: { id: req.params.id },
       data: { title: autoTitle },
     });
   }
-
-  await prisma.user.update({
-    where: { id: String(user_id) },
-    data: { dailyQuota: { decrement: 1 } },
-  });
-
-  await prisma.usageLog.create({
-    data: { userId: String(user_id), expertId: conversation.expertId },
-  });
 
   const history = await prisma.message.findMany({
     where: { conversationId: req.params.id },
@@ -209,6 +220,7 @@ router.get('/conversations/:id/messages/stream', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
 
   let fullContent = '';
+  let failed = false;
 
   try {
     for await (const chunk of generateReplyStream(
@@ -220,14 +232,28 @@ router.get('/conversations/:id/messages/stream', async (req, res) => {
       res.write(`data: ${JSON.stringify({ content: chunk })}\n\n`);
     }
   } catch {
-    res.write(`data: ${JSON.stringify({ error: 'AI服务暂时不可用' })}\n\n`);
+    failed = true;
+  }
+
+  if (failed || !fullContent) {
+    const aiMessage = await prisma.message.create({
+      data: { conversationId: req.params.id, role: 'assistant', content: '[暂时无法回复]' },
+    });
+    await refundCredits(String(user_id));
+    res.write(`data: ${JSON.stringify({ error: 'AI服务暂时不可用', messageId: aiMessage.id, titleUpdated: msgCount === 1 })}\n\n`);
+    res.end();
+    return;
   }
 
   const aiMessage = await prisma.message.create({
     data: { conversationId: req.params.id, role: 'assistant', content: fullContent },
   });
 
-  res.write(`data: ${JSON.stringify({ done: true, messageId: aiMessage.id, titleUpdated: msgCount === 1 })}\n\n`);
+  await prisma.usageLog.create({
+    data: { userId: String(user_id), expertId: conversation.expertId },
+  });
+
+  res.write(`data: ${JSON.stringify({ done: true, messageId: aiMessage.id, titleUpdated: msgCount === 1, credits_remaining: reservedUser.credits })}\n\n`);
   res.end();
 });
 

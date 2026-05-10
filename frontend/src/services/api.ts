@@ -1,4 +1,4 @@
-const BASE_URL = 'http://localhost:3001/api/v1';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:3001/api/v1';
 
 export async function quickLogin(nickname: string) {
   const res = await fetch(`${BASE_URL}/auth/quick-login`, {
@@ -12,6 +12,7 @@ export async function quickLogin(nickname: string) {
 
 export async function getExperts() {
   const res = await fetch(`${BASE_URL}/experts`);
+  if (!res.ok) throw new Error('failed to load experts');
   return res.json();
 }
 
@@ -21,6 +22,7 @@ export async function createConversation(userId: string, expertId: string, title
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_id: userId, expert_id: expertId, title }),
   });
+  if (!res.ok) throw new Error('failed to create conversation');
   return res.json();
 }
 
@@ -30,6 +32,7 @@ export async function renameConversation(conversationId: string, title: string) 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ title }),
   });
+  if (!res.ok) throw new Error('failed to rename conversation');
   return res.json();
 }
 
@@ -37,21 +40,25 @@ export async function deleteConversation(conversationId: string) {
   const res = await fetch(`${BASE_URL}/chat/conversations/${conversationId}`, {
     method: 'DELETE',
   });
+  if (!res.ok) throw new Error('failed to delete conversation');
   return res.json();
 }
 
 export async function getConversation(conversationId: string) {
   const res = await fetch(`${BASE_URL}/chat/conversations/${conversationId}`);
+  if (!res.ok) throw new Error('failed to load conversation');
   return res.json();
 }
 
 export async function getConversations(userId: string) {
   const res = await fetch(`${BASE_URL}/chat/conversations?user_id=${userId}`);
+  if (!res.ok) throw new Error('failed to load conversations');
   return res.json();
 }
 
 export async function getMessages(conversationId: string) {
   const res = await fetch(`${BASE_URL}/chat/conversations/${conversationId}/messages`);
+  if (!res.ok) throw new Error('failed to load messages');
   return res.json();
 }
 
@@ -69,12 +76,20 @@ export function sendMessageStream(
     signal: controller.signal,
   }).then(async response => {
     if (!response.ok) {
-      if (response.status === 429) { onError('配额已用完'); return; }
+      if (response.status === 429) {
+        onError('积分不足');
+        return;
+      }
       onError('请求失败');
       return;
     }
+
     const reader = response.body?.getReader();
-    if (!reader) { onError('无法读取响应'); return; }
+    if (!reader) {
+      onError('无法读取响应');
+      return;
+    }
+
     const decoder = new TextDecoder();
     let buffer = '';
 
@@ -102,7 +117,8 @@ export function sendMessageStream(
   return controller;
 }
 
-export async function getQuota(userId: string) {
-  const res = await fetch(`${BASE_URL}/users/${userId}/quota`);
+export async function getCredits(userId: string) {
+  const res = await fetch(`${BASE_URL}/users/${userId}/credits`);
+  if (!res.ok) throw new Error('failed to load credits');
   return res.json();
 }

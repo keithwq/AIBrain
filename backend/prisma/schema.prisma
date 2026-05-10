@@ -8,11 +8,11 @@ datasource db {
 }
 
 model User {
-  id              String   @id @default(uuid())
-  nickname        String   @unique @db.VarChar(50)
-  dailyQuota      Int      @default(10) @map("daily_quota")
-  quotaResetDate  DateTime @default(now()) @map("quota_reset_date")
-  createdAt       DateTime @default(now()) @map("created_at")
+  id        String   @id @default(uuid())
+  nickname  String   @unique @db.VarChar(50)
+  credits   Int      @default(10) @map("daily_quota")
+  creditsUpdatedAt DateTime @default(now()) @map("quota_reset_date")
+  createdAt DateTime @default(now()) @map("created_at")
 
   conversations Conversation[]
   usageLogs     UsageLog[]

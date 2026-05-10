@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="cartoon rocket avatar">
+  <defs>
+    <linearGradient id="body" x1="72" x2="184" y1="36" y2="220">
+      <stop stop-color="#f8fafc"/>
+      <stop offset="1" stop-color="#cbd5e1"/>
+    </linearGradient>
+    <linearGradient id="flame" x1="0" x2="0" y1="0" y2="1">
+      <stop stop-color="#fb923c"/>
+      <stop offset="1" stop-color="#ef4444"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="54" fill="#eff6ff"/>
+  <path d="M128 30c28 0 50 34 50 72v52c0 33-22 62-50 62s-50-29-50-62v-52c0-38 22-72 50-72Z" fill="url(#body)" stroke="#334155" stroke-width="8"/>
+  <path d="M128 36c18 13 30 38 30 62h-60c0-24 12-49 30-62Z" fill="#60a5fa"/>
+  <circle cx="128" cy="106" r="24" fill="#93c5fd" stroke="#1d4ed8" stroke-width="8"/>
+  <circle cx="128" cy="106" r="9" fill="#111827"/>
+  <circle cx="124" cy="102" r="3" fill="#fff"/>
+  <path d="M108 138c10 8 30 8 40 0" fill="none" stroke="#475569" stroke-width="7" stroke-linecap="round"/>
+  <path d="M74 126l-34 18 28 10-12 20 32-10Z" fill="#f97316" stroke="#7c2d12" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M182 126l34 18-28 10 12 20-32-10Z" fill="#f97316" stroke="#7c2d12" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M104 178h48l-12 34h-24z" fill="#cbd5e1" stroke="#334155" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M128 246c10-16 16-34 16-48h-32c0 14 6 32 16 48Z" fill="url(#flame)"/>
+</svg>

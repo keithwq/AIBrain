@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="cartoon lamp with book avatar">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="40%" r="65%">
+      <stop offset="0" stop-color="#fff9c2"/>
+      <stop offset="0.7" stop-color="#fde68a"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </radialGradient>
+  </defs>
+  <rect width="256" height="256" rx="54" fill="#f8fafc"/>
+  <circle cx="128" cy="128" r="92" fill="url(#glow)" opacity=".45"/>
+  <path d="M128 40c34 0 60 26 60 60v58c0 26-17 48-40 56v14h-40v-14c-23-8-40-30-40-56v-58c0-34 26-60 60-60Z" fill="#fef3c7" stroke="#b45309" stroke-width="8"/>
+  <rect x="98" y="116" width="60" height="68" rx="20" fill="#fde68a" stroke="#b45309" stroke-width="8"/>
+  <circle cx="110" cy="144" r="8" fill="#111827"/>
+  <circle cx="146" cy="144" r="8" fill="#111827"/>
+  <circle cx="113" cy="141" r="3" fill="#fff"/>
+  <circle cx="149" cy="141" r="3" fill="#fff"/>
+  <path d="M112 166c8 7 24 7 32 0" fill="none" stroke="#92400e" stroke-width="7" stroke-linecap="round"/>
+  <path d="M80 92c10-18 31-28 48-28" fill="none" stroke="#d97706" stroke-width="10" stroke-linecap="round"/>
+  <path d="M176 92c-10-18-31-28-48-28" fill="none" stroke="#d97706" stroke-width="10" stroke-linecap="round"/>
+  <path d="M60 202h136" stroke="#7c2d12" stroke-width="12" stroke-linecap="round"/>
+  <path d="M90 206h76" stroke="#9a3412" stroke-width="18" stroke-linecap="round"/>
+  <rect x="80" y="186" width="96" height="24" rx="10" fill="#c2410c"/>
+  <path d="M176 76l28 6-8 24-28-6z" fill="#ea580c" opacity=".9"/>
+  <path d="M183 83l18 4-5 16-18-4z" fill="#fff" opacity=".55"/>
+</svg>

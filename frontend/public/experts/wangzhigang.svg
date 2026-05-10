@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="cartoon pen avatar">
+  <defs>
+    <linearGradient id="penBody" x1="60" x2="196" y1="24" y2="232">
+      <stop stop-color="#fef3c7"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="penTip" x1="0" x2="1">
+      <stop stop-color="#7c2d12"/>
+      <stop offset="1" stop-color="#451a03"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="54" fill="#f0fdf4"/>
+  <path d="M92 30h72l20 18v136l-20 18H92L72 184V48Z" fill="url(#penBody)" stroke="#92400e" stroke-width="8" />
+  <path d="M92 30h72v26H92z" fill="#fde68a" opacity=".8"/>
+  <path d="M92 184h72v18H92z" fill="#f59e0b" opacity=".55"/>
+  <path d="M72 184l20 18V48L72 30z" fill="#fbbf24" opacity=".65"/>
+  <path d="M164 214l20-12 12-20-28-28-20 20z" fill="url(#penTip)" stroke="#451a03" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M176 166l18 18" stroke="#fef3c7" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="110" cy="112" r="9" fill="#111827"/>
+  <circle cx="146" cy="112" r="9" fill="#111827"/>
+  <circle cx="113" cy="109" r="3" fill="#fff"/>
+  <circle cx="149" cy="109" r="3" fill="#fff"/>
+  <path d="M108 136c11 8 29 8 40 0" fill="none" stroke="#7c2d12" stroke-width="7" stroke-linecap="round"/>
+  <path d="M102 70c8-10 18-14 26-14" fill="none" stroke="#b45309" stroke-width="8" stroke-linecap="round"/>
+  <path d="M154 70c8-10 18-14 26-14" fill="none" stroke="#b45309" stroke-width="8" stroke-linecap="round"/>
+  <path d="M74 84c-18 8-24 26-20 40" fill="none" stroke="#22c55e" stroke-width="8" stroke-linecap="round"/>
+  <path d="M182 84c18 8 24 26 20 40" fill="none" stroke="#22c55e" stroke-width="8" stroke-linecap="round"/>
+  <path d="M108 156h40" stroke="#92400e" stroke-width="6" stroke-linecap="round"/>
+</svg>
