@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import LoginPage from './pages/LoginPage';
+import HomePage from './pages/HomePage';
 import ExpertsPage from './pages/ExpertsPage';
 import ChatPage from './pages/ChatPage';
 import CreditsPage from './pages/CreditsPage';
@@ -13,6 +14,7 @@ const LS_NICKNAME = 'aibrain_nickname';
 
 type View =
   | { page: 'login' }
+  | { page: 'home' }
   | { page: 'experts' }
   | { page: 'credits' }
   | { page: 'chat'; conversationId: string; expertId: string; expertName: string };
@@ -35,7 +37,7 @@ function clearSession() {
 
 function App() {
   const session = loadSession();
-  const [view, setView] = useState<View>(() => (session ? { page: 'experts' } : { page: 'login' }));
+  const [view, setView] = useState<View>(() => (session ? { page: 'home' } : { page: 'login' }));
   const [userId, setUserId] = useState(() => session?.userId || '');
   const [nickname, setNickname] = useState(() => session?.nickname || '');
 
@@ -43,8 +45,12 @@ function App() {
     saveSession(uid, nick);
     setUserId(uid);
     setNickname(nick);
-    setView({ page: 'experts' });
+    setView({ page: 'home' });
   };
+
+  const handleOpenHome = useCallback(() => {
+    setView({ page: 'home' });
+  }, []);
 
   const handleSelectExpert = async (expertId: string) => {
     try {
@@ -91,6 +97,17 @@ function App() {
           expertName={view.expertName}
           onBack={() => setView({ page: 'experts' })}
           onOpenCredits={handleOpenCredits}
+          onOpenHome={handleOpenHome}
+        />
+      )}
+      {view.page === 'home' && (
+        <HomePage
+          userId={userId}
+          nickname={nickname}
+          onOpenExperts={() => setView({ page: 'experts' })}
+          onOpenCredits={handleOpenCredits}
+          onOpenConversation={handleOpenConversation}
+          onLogout={handleLogout}
         />
       )}
       {view.page === 'experts' && (
@@ -100,6 +117,7 @@ function App() {
           onSelectExpert={handleSelectExpert}
           onOpenConversation={handleOpenConversation}
           onOpenCredits={handleOpenCredits}
+          onOpenHome={handleOpenHome}
           onLogout={handleLogout}
         />
       )}
@@ -107,7 +125,7 @@ function App() {
         <CreditsPage
           userId={userId}
           nickname={nickname}
-          onBack={() => setView({ page: 'experts' })}
+          onBack={handleOpenHome}
         />
       )}
       {view.page === 'login' && <LoginPage onLogin={handleLogin} />}

@@ -17,6 +17,7 @@ interface Props {
   expertName: string;
   onBack: () => void;
   onOpenCredits: () => void;
+  onOpenHome: () => void;
 }
 
 type InputType = 'text' | 'textarea' | 'select';
@@ -298,7 +299,7 @@ function Field({ field, value, onChange }: { field: FieldConfig; value: string; 
   );
 }
 
-export default function ChatPage({ userId, conversationId, expertId, expertName, onBack, onOpenCredits }: Props) {
+export default function ChatPage({ userId, conversationId, expertId, expertName, onBack, onOpenCredits, onOpenHome }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -409,6 +410,9 @@ export default function ChatPage({ userId, conversationId, expertId, expertName,
         <div className="mx-auto flex max-w-5xl items-center gap-3">
           <button onClick={onBack} className="flex h-9 w-9 items-center justify-center rounded-full border border-stone-300 bg-white/70 text-stone-600 transition hover:border-stone-500" title="返回">
             ←
+          </button>
+          <button onClick={onOpenHome} className="rounded-full border border-stone-200 bg-white/70 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:border-emerald-300 hover:text-emerald-800">
+            首页
           </button>
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-base font-black text-emerald-950">{expertName || meta.alias}</h1>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getExperts, getCredits, getConversations, deleteConversation, renameConversation } from '../services/api';
 import { showToast } from '../components/toastStore';
 import { FEATURED_EXPERT_ORDER, getExpertDisplay } from '../data/experts';
+import { EXPERT_CATEGORY_BY_ID, EXPERT_CATEGORIES } from '../data/expertCategories';
 
 interface Expert {
   id: string;
@@ -28,17 +29,18 @@ interface Props {
   onSelectExpert: (expertId: string) => void;
   onOpenConversation: (conversationId: string, expertId: string) => void;
   onOpenCredits: () => void;
+  onOpenHome: () => void;
   onLogout: () => void;
 }
 
 function Skeleton({ className }: { className?: string }) {
-  return <div className={`animate-pulse bg-gray-200 rounded ${className || ''}`} />;
+  return <div className={`animate-pulse rounded bg-gray-200 ${className || ''}`} />;
 }
 
 const EXPERT_PLACEHOLDER = Array(8).fill(null);
 const ORDER_INDEX = new Map<string, number>(FEATURED_EXPERT_ORDER.map((id, index) => [id, index]));
 
-export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenConversation, onOpenCredits, onLogout }: Props) {
+export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenConversation, onOpenCredits, onOpenHome, onLogout }: Props) {
   const [experts, setExperts] = useState<Expert[] | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [credits, setCredits] = useState<number | null>(null);
@@ -68,6 +70,14 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
     });
   }, [experts]);
 
+  const groupedExperts = useMemo(() => {
+    if (!sortedExperts) return [];
+    return EXPERT_CATEGORIES.map(category => ({
+      ...category,
+      experts: sortedExperts.filter(expert => category.expertIds.includes(expert.id)),
+    })).filter(group => group.experts.length > 0);
+  }, [sortedExperts]);
+
   const filteredConversations = conversations.filter(conv =>
     conv.title.toLowerCase().includes(searchQuery.toLowerCase()),
   );
@@ -75,25 +85,30 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm px-6 py-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-950">AI外脑</h1>
-        <div className="flex items-center gap-4 text-sm text-gray-600">
-          {credits !== null ? (
-            <button type="button" onClick={onOpenCredits} className="flex items-center gap-1 rounded-full border border-gray-200 px-3 py-1.5 hover:border-emerald-300 hover:bg-emerald-50">
-              <span>剩余积分:</span>
-              <strong className={credits === 0 ? 'text-red-500' : 'text-emerald-600'}>{credits}</strong>
-            </button>
-          ) : (
-            <Skeleton className="w-20 h-4" />
-          )}
-          <span>{nickname}</span>
-          <button onClick={onOpenCredits} className="text-emerald-700 hover:underline">积分中心</button>
-          <button onClick={onLogout} className="text-blue-600 hover:underline">退出</button>
+      <header className="border-b border-gray-100 bg-white px-6 py-4 shadow-sm">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
+          <button onClick={onOpenHome} className="text-sm font-semibold text-emerald-700 hover:text-emerald-900">
+            返回首页
+          </button>
+          <h1 className="text-2xl font-black text-gray-950">专家咨询</h1>
+          <div className="flex items-center gap-3 text-sm text-gray-600">
+            {credits !== null ? (
+              <button type="button" onClick={onOpenCredits} className="flex items-center gap-1 rounded-full border border-gray-200 px-3 py-1.5 hover:border-emerald-300 hover:bg-emerald-50">
+                <span>剩余积分:</span>
+                <strong className={credits === 0 ? 'text-red-500' : 'text-emerald-600'}>{credits}</strong>
+              </button>
+            ) : (
+              <Skeleton className="h-4 w-20" />
+            )}
+            <span>{nickname}</span>
+            <button onClick={onOpenCredits} className="text-emerald-700 hover:underline">积分中心</button>
+            <button onClick={onLogout} className="text-blue-600 hover:underline">退出</button>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto p-6 space-y-9">
-        {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">{error}</div>}
+      <main className="mx-auto max-w-6xl space-y-10 p-6">
+        {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
         {isCreditsExhausted && (
           <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             <p className="font-black">积分已用完，暂时不能发起新咨询</p>
@@ -101,16 +116,43 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
           </div>
         )}
 
+        <section className="space-y-4">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-black text-gray-950">领域入口</h2>
+              <p className="mt-1 text-sm text-gray-500">先选场景，再选专家。后续蒸馏的新专家，只要挂到对应领域就能自然加入。</p>
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {groupedExperts.map(group => (
+              <button
+                key={group.id}
+                type="button"
+                onClick={() => onSelectExpert(group.experts[0].id)}
+                disabled={isCreditsExhausted}
+                className={`rounded-2xl border border-gray-100 bg-white p-5 text-left shadow-sm transition hover:border-emerald-200 hover:shadow-md ${isCreditsExhausted ? 'opacity-60' : ''}`}
+              >
+                <p className="text-lg font-black text-gray-950">{group.name}</p>
+                <p className="mt-2 text-sm leading-6 text-gray-500">{group.description}</p>
+                <p className="mt-4 text-xs font-semibold text-emerald-700">{group.experts.length} 位专家</p>
+              </button>
+            ))}
+          </div>
+        </section>
+
         <section>
-          <div className="flex items-end justify-between mb-4">
-            <h2 className="text-2xl font-bold text-gray-950">选择专家开始对话</h2>
-            <span className="text-sm text-emerald-700">专家库已接入</span>
+          <div className="mb-4 flex items-end justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-black text-gray-950">选择专家开始对话</h2>
+              <span className="text-sm text-emerald-700">专家库已接入</span>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {(sortedExperts || EXPERT_PLACEHOLDER).map((expert, i) => {
               const display = expert ? getExpertDisplay(expert.id) : null;
               const avatar = expert?.avatar || display?.avatar;
+              const category = expert ? EXPERT_CATEGORY_BY_ID.get(expert.id) : null;
 
               return (
                 <button
@@ -124,31 +166,32 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
                     onSelectExpert(expert.id);
                   }}
                   disabled={!expert}
-                  className={`group bg-white rounded-lg p-5 shadow-sm border border-gray-100 hover:border-emerald-200 hover:shadow-md transition text-left ${isCreditsExhausted ? 'opacity-60' : ''} ${!expert ? 'pointer-events-none opacity-40' : ''}`}
+                  className={`group rounded-lg border border-gray-100 bg-white p-5 text-left shadow-sm transition hover:border-emerald-200 hover:shadow-md ${isCreditsExhausted ? 'opacity-60' : ''} ${!expert ? 'pointer-events-none opacity-40' : ''}`}
                 >
                   {expert && display ? (
                     <>
                       <div className="flex items-start gap-4">
-                        <div className="w-24 h-24 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center overflow-hidden shrink-0">
+                        <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border border-emerald-100 bg-emerald-50">
                           {avatar ? (
-                            <img src={avatar} alt={display.alias} className="w-full h-full object-cover" />
+                            <img src={avatar} alt={display.alias} className="h-full w-full object-cover" />
                           ) : (
                             <span className="text-3xl text-emerald-800">{display.alias[0]}</span>
                           )}
                         </div>
                         <div className="min-w-0">
-                          <h3 className="font-bold text-lg text-gray-950 truncate">{display.alias}</h3>
+                          <h3 className="truncate text-lg font-black text-gray-950">{display.alias}</h3>
                           <p className="mt-1 text-[15px] font-semibold text-emerald-700">{display.shortTitle}</p>
-                          <p className="text-sm text-gray-600 mt-3 leading-6 truncate">{display.cardIntro}</p>
+                          <p className="mt-3 truncate text-sm leading-6 text-gray-600">{display.cardIntro}</p>
+                          {category && <p className="mt-2 text-xs font-semibold text-gray-400">{category.name}</p>}
                         </div>
                       </div>
-                      <p className="text-xs text-gray-400 mt-3 leading-5 line-clamp-2">{expert.tagline || display.tagline}</p>
+                      <p className="mt-3 line-clamp-2 text-xs leading-5 text-gray-400">{expert.tagline || display.tagline}</p>
                     </>
                   ) : (
                     <>
-                      <Skeleton className="w-24 h-24 rounded-full mb-4" />
-                      <Skeleton className="w-28 h-4 mb-2" />
-                      <Skeleton className="w-40 h-3" />
+                      <Skeleton className="mb-4 h-24 w-24 rounded-full" />
+                      <Skeleton className="mb-2 h-4 w-28" />
+                      <Skeleton className="h-3 w-40" />
                     </>
                   )}
                 </button>
@@ -159,23 +202,20 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
 
         {conversations.length > 0 && (
           <section>
-            <h2 className="text-2xl font-bold text-gray-950 mb-4">历史对话</h2>
+            <h2 className="mb-4 text-2xl font-black text-gray-950">历史对话</h2>
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="搜索对话..."
-              className="w-full mb-3 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:border-emerald-500"
+              className="mb-3 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
             />
             <div className="space-y-2">
               {filteredConversations.map(conv => {
                 const display = getExpertDisplay(conv.expertId);
 
                 return (
-                  <div
-                    key={conv.id}
-                    className="w-full bg-white rounded-lg p-4 shadow-sm border border-gray-100 flex items-center justify-between"
-                  >
+                  <div key={conv.id} className="flex items-center justify-between rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
                     <div className="flex-1 text-left">
                       {editingId === conv.id ? (
                         <input
@@ -193,19 +233,22 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
                             }
                           }}
                           onBlur={() => setEditingId(null)}
-                          className="w-full px-1 py-0.5 border border-emerald-400 rounded text-sm outline-none"
+                          className="w-full rounded border border-emerald-400 px-1 py-0.5 text-sm outline-none"
                           autoFocus
                         />
                       ) : (
                         <button
                           onClick={() => onOpenConversation(conv.id, conv.expertId)}
-                          onDoubleClick={() => { setEditingId(conv.id); setEditTitle(conv.title); }}
+                          onDoubleClick={() => {
+                            setEditingId(conv.id);
+                            setEditTitle(conv.title);
+                          }}
                           className="w-full text-left"
                         >
-                          <span className="font-medium text-sm text-gray-950">{conv.title}</span>
-                          <span className="text-xs text-emerald-700 ml-2">{display.alias}</span>
-                          <span className="text-xs text-gray-400 ml-2">{new Date(conv.createdAt).toLocaleDateString()}</span>
-                          <span className="text-xs text-blue-600 ml-2">&rarr;</span>
+                          <span className="text-sm font-medium text-gray-950">{conv.title}</span>
+                          <span className="ml-2 text-xs text-emerald-700">{display.alias}</span>
+                          <span className="ml-2 text-xs text-gray-400">{new Date(conv.createdAt).toLocaleDateString()}</span>
+                          <span className="ml-2 text-xs text-blue-600">&rarr;</span>
                         </button>
                       )}
                     </div>
@@ -217,7 +260,7 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
                           }).catch(() => showToast('删除失败'));
                         }
                       }}
-                      className="ml-2 text-gray-400 hover:text-red-500 transition p-1"
+                      className="ml-2 p-1 text-gray-400 transition hover:text-red-500"
                       title="删除"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
