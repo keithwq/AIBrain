@@ -17,7 +17,7 @@ interface Props {
   onBack: () => void;
 }
 
-export default function ChatPage({ userId, conversationId, expertId, expertName, onBack }: Props) {
+export default function ChatPage({ userId, conversationId, expertName, onBack }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);

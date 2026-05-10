@@ -35,7 +35,7 @@ function Skeleton({ className }: { className?: string }) {
 }
 
 const EXPERT_PLACEHOLDER = Array(8).fill(null);
-const ORDER_INDEX = new Map(FEATURED_EXPERT_ORDER.map((id, index) => [id, index]));
+const ORDER_INDEX = new Map<string, number>(FEATURED_EXPERT_ORDER.map((id, index) => [id, index]));
 
 export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenConversation, onLogout }: Props) {
   const [experts, setExperts] = useState<Expert[] | null>(null);
