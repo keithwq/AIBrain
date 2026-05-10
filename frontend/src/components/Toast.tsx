@@ -1,28 +1,21 @@
 import { useEffect, useState } from 'react';
+import { bindToastStore, type ToastType } from './toastStore';
 
 interface ToastItem {
   id: number;
   message: string;
-  type: 'error' | 'info';
-}
-
-let toastId = 0;
-let addToastFn: ((msg: string, type: 'error' | 'info') => void) | null = null;
-
-export function showToast(message: string, type: 'error' | 'info' = 'error') {
-  addToastFn?.(message, type);
+  type: ToastType;
 }
 
 export default function Toast() {
   const [items, setItems] = useState<ToastItem[]>([]);
 
   useEffect(() => {
-    addToastFn = (message, type) => {
-      const id = ++toastId;
+    bindToastStore((id, message, type) => {
       setItems(prev => [...prev, { id, message, type }]);
       setTimeout(() => setItems(prev => prev.filter(i => i.id !== id)), 3000);
-    };
-    return () => { addToastFn = null; };
+    });
+    return () => bindToastStore(null);
   }, []);
 
   if (items.length === 0) return null;

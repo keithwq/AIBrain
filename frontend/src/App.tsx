@@ -4,7 +4,7 @@ import ExpertsPage from './pages/ExpertsPage';
 import ChatPage from './pages/ChatPage';
 import Toast from './components/Toast';
 import { createConversation } from './services/api';
-import { showToast } from './components/Toast';
+import { showToast } from './components/toastStore';
 import { getExpertDisplay } from './data/experts';
 
 const LS_USER_ID = 'aibrain_user_id';

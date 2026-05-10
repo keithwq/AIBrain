@@ -77,16 +77,16 @@ export function sendMessageStream(
   }).then(async response => {
     if (!response.ok) {
       if (response.status === 429) {
-        onError('积分不足');
+        onError('积分不足，当前不能继续提问。');
         return;
       }
-      onError('请求失败');
+      onError('请求失败，请稍后重试。');
       return;
     }
 
     const reader = response.body?.getReader();
     if (!reader) {
-      onError('无法读取响应');
+      onError('无法读取回复，请稍后重试。');
       return;
     }
 
@@ -106,7 +106,9 @@ export function sendMessageStream(
             if (data.content) onChunk(data.content);
             if (data.done) onDone(data.messageId || '');
             if (data.error) onError(data.error);
-          } catch { }
+          } catch {
+            // Ignore incomplete stream fragments until the next complete event arrives.
+          }
         }
       }
     }

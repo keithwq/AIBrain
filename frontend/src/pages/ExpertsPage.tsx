@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getExperts, getCredits, getConversations, deleteConversation, renameConversation } from '../services/api';
-import { showToast } from '../components/Toast';
+import { showToast } from '../components/toastStore';
 import { FEATURED_EXPERT_ORDER, getExpertDisplay } from '../data/experts';
 
 interface Expert {
@@ -70,6 +70,7 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
   const filteredConversations = conversations.filter(conv =>
     conv.title.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+  const isCreditsExhausted = credits === 0;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -88,6 +89,12 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
 
       <main className="max-w-5xl mx-auto p-6 space-y-9">
         {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">{error}</div>}
+        {isCreditsExhausted && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <p className="font-black">积分已用完，暂时不能发起新咨询</p>
+            <p className="mt-1 text-xs leading-5 text-red-700">历史对话仍可查看。补充积分后，专家卡片会自动恢复可点击。</p>
+          </div>
+        )}
 
         <section>
           <div className="flex items-end justify-between mb-4">
@@ -103,9 +110,16 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
               return (
                 <button
                   key={expert?.id || i}
-                  onClick={() => expert && onSelectExpert(expert.id)}
-                  disabled={credits === 0 || !expert}
-                  className={`group bg-white rounded-lg p-5 shadow-sm border border-gray-100 hover:border-emerald-200 hover:shadow-md transition text-left disabled:opacity-40 ${!expert ? 'pointer-events-none' : ''}`}
+                  onClick={() => {
+                    if (!expert) return;
+                    if (isCreditsExhausted) {
+                      showToast('积分已用完，补充后才能发起新咨询。');
+                      return;
+                    }
+                    onSelectExpert(expert.id);
+                  }}
+                  disabled={!expert}
+                  className={`group bg-white rounded-lg p-5 shadow-sm border border-gray-100 hover:border-emerald-200 hover:shadow-md transition text-left ${isCreditsExhausted ? 'opacity-60' : ''} ${!expert ? 'pointer-events-none opacity-40' : ''}`}
                 >
                   {expert && display ? (
                     <>

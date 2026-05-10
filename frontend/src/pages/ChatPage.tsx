@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getConversation, getMessages, sendMessageStream } from '../services/api';
-import { showToast } from '../components/Toast';
+import { showToast } from '../components/toastStore';
 import { getExpertDisplay } from '../data/experts';
 
 interface Message {
@@ -303,6 +303,7 @@ export default function ChatPage({ userId, conversationId, expertId, expertName,
   const [sending, setSending] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [conversationTitle, setConversationTitle] = useState('');
+  const [creditBlocked, setCreditBlocked] = useState(false);
   const [replyLength, setReplyLength] = useState<ReplyLength>('正常');
   const [askStyle, setAskStyle] = useState<AskStyle>('边问边判');
   const [outputStyle, setOutputStyle] = useState<OutputStyle>('给行动清单');
@@ -355,6 +356,7 @@ export default function ChatPage({ userId, conversationId, expertId, expertName,
     if (!text.trim() || sending) return;
 
     abortRef.current?.abort();
+    setCreditBlocked(false);
     setSending(true);
     setInput('');
     setStreamingContent('');
@@ -382,6 +384,9 @@ export default function ChatPage({ userId, conversationId, expertId, expertName,
         inputRef.current?.focus();
       },
       err => {
+        if (err.includes('积分不足')) {
+          setCreditBlocked(true);
+        }
         showToast(err);
         setStreamingContent('');
         setSending(false);
@@ -498,7 +503,14 @@ export default function ChatPage({ userId, conversationId, expertId, expertName,
       </div>
 
       <div className="border-t border-emerald-900/10 bg-[#f7f2e8]/90 px-4 py-3 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl gap-2">
+        <div className="mx-auto max-w-5xl">
+          {creditBlocked && (
+            <div className="mb-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              <p className="font-black">积分不足，暂时不能继续提问</p>
+              <p className="mt-1 text-xs leading-5 text-red-700">本次没有扣分。请返回专家页查看余额，补充积分后再继续咨询。</p>
+            </div>
+          )}
+          <div className="flex gap-2">
           <input
             ref={inputRef}
             type="text"
@@ -511,6 +523,7 @@ export default function ChatPage({ userId, conversationId, expertId, expertName,
           <button onClick={() => sendText(input)} disabled={sending || !input.trim()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-900 text-white shadow transition hover:bg-emerald-800 disabled:opacity-40" title="发送">
             →
           </button>
+          </div>
         </div>
       </div>
     </div>
