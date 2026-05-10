@@ -16,7 +16,7 @@ const SUPPLIES = [
   {
     title: '今日补给',
     amount: 3,
-    description: '适合积分刚好用完时，先继续完成一次咨询。',
+    description: '适合积分刚好用完时，先继续完成一次方法调用。',
   },
   {
     title: '任务奖励',
@@ -24,9 +24,9 @@ const SUPPLIES = [
     description: '用于后续接入真实任务系统，现在先作为可验收入口。',
   },
   {
-    title: '深度咨询包',
+    title: '深度调用包',
     amount: 10,
-    description: '适合连续问多个专家，方便测试完整咨询流程。',
+    description: '适合连续使用多张方法卡，方便测试完整流程。',
   },
 ];
 
@@ -59,7 +59,7 @@ export default function CreditsPage({ userId, nickname, onBack }: Props) {
       <header className="border-b border-gray-100 bg-white px-6 py-4 shadow-sm">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
           <button onClick={onBack} className="text-sm font-semibold text-emerald-700 hover:text-emerald-900">
-            返回专家库
+            返回 AI 外脑
           </button>
           <div className="text-right">
             <p className="text-sm text-gray-500">{nickname}</p>
@@ -79,7 +79,7 @@ export default function CreditsPage({ userId, nickname, onBack }: Props) {
               <span className="pb-2 text-sm text-gray-500">分</span>
             </div>
             <p className="mt-4 text-sm leading-6 text-gray-600">
-              每完成一次专家回答消耗 1 积分。AI 服务失败时会退回本次预留的积分。
+              每完成一次有效回答消耗 1 积分。AI 服务失败时会退回本次预留的积分。
             </p>
           </div>
 
@@ -88,7 +88,7 @@ export default function CreditsPage({ userId, nickname, onBack }: Props) {
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg bg-emerald-50 p-4">
                 <p className="text-sm font-black text-emerald-900">发问前检查</p>
-                <p className="mt-2 text-xs leading-5 text-emerald-800">余额为 0 时不会进入专家回答。</p>
+                <p className="mt-2 text-xs leading-5 text-emerald-800">余额为 0 时不会进入系统回答。</p>
               </div>
               <div className="rounded-lg bg-sky-50 p-4">
                 <p className="text-sm font-black text-sky-900">成功后消耗</p>

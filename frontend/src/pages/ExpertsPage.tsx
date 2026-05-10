@@ -48,14 +48,15 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
   useEffect(() => {
     getExperts().then((items: Expert[]) => {
       setExperts(items);
       setError(null);
     }).catch(() => {
-      setError('加载专家列表失败');
-      showToast('加载专家列表失败');
+      setError('加载方法卡失败');
+      showToast('加载方法卡失败');
     });
     getCredits(userId).then((data: { credits: number }) => setCredits(data.credits)).catch(() => {});
     getConversations(userId).then(setConversations).catch(() => {});
@@ -78,6 +79,9 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
     })).filter(group => group.experts.length > 0);
   }, [sortedExperts]);
 
+  const selectedCategory = groupedExperts.find(group => group.id === selectedCategoryId) || null;
+  const displayedExperts = selectedCategory ? selectedCategory.experts : sortedExperts;
+
   const filteredConversations = conversations.filter(conv =>
     conv.title.toLowerCase().includes(searchQuery.toLowerCase()),
   );
@@ -90,7 +94,7 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
           <button onClick={onOpenHome} className="text-sm font-semibold text-emerald-700 hover:text-emerald-900">
             返回首页
           </button>
-          <h1 className="text-2xl font-black text-gray-950">专家咨询</h1>
+          <h1 className="text-2xl font-black text-gray-950">AI外脑</h1>
           <div className="flex items-center gap-3 text-sm text-gray-600">
             {credits !== null ? (
               <button type="button" onClick={onOpenCredits} className="flex items-center gap-1 rounded-full border border-gray-200 px-3 py-1.5 hover:border-emerald-300 hover:bg-emerald-50">
@@ -111,8 +115,8 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
         {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
         {isCreditsExhausted && (
           <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            <p className="font-black">积分已用完，暂时不能发起新咨询</p>
-            <p className="mt-1 text-xs leading-5 text-red-700">历史对话仍可查看。补充积分后，专家卡片会自动恢复可点击。</p>
+            <p className="font-black">积分已用完，暂时不能开启新对话</p>
+            <p className="mt-1 text-xs leading-5 text-red-700">历史记录仍可查看。补充积分后，方法卡会自动恢复可点击。</p>
           </div>
         )}
 
@@ -120,7 +124,7 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
           <div className="flex items-end justify-between gap-3">
             <div>
               <h2 className="text-2xl font-black text-gray-950">领域入口</h2>
-              <p className="mt-1 text-sm text-gray-500">先选场景，再选专家。后续蒸馏的新专家，只要挂到对应领域就能自然加入。</p>
+              <p className="mt-1 text-sm text-gray-500">先选场景，再选方法。后续蒸馏的新方法卡，只要挂到对应领域就能自然加入。</p>
             </div>
           </div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -128,13 +132,12 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
               <button
                 key={group.id}
                 type="button"
-                onClick={() => onSelectExpert(group.experts[0].id)}
-                disabled={isCreditsExhausted}
-                className={`rounded-2xl border border-gray-100 bg-white p-5 text-left shadow-sm transition hover:border-emerald-200 hover:shadow-md ${isCreditsExhausted ? 'opacity-60' : ''}`}
+                onClick={() => setSelectedCategoryId(group.id)}
+                className={`rounded-2xl border p-5 text-left shadow-sm transition hover:border-emerald-200 hover:shadow-md ${selectedCategoryId === group.id ? 'border-emerald-300 bg-emerald-50' : 'border-gray-100 bg-white'}`}
               >
                 <p className="text-lg font-black text-gray-950">{group.name}</p>
                 <p className="mt-2 text-sm leading-6 text-gray-500">{group.description}</p>
-                <p className="mt-4 text-xs font-semibold text-emerald-700">{group.experts.length} 位专家</p>
+                <p className="mt-4 text-xs font-semibold text-emerald-700">{group.experts.length} 张方法卡</p>
               </button>
             ))}
           </div>
@@ -143,13 +146,22 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
         <section>
           <div className="mb-4 flex items-end justify-between gap-3">
             <div>
-              <h2 className="text-2xl font-black text-gray-950">选择专家开始对话</h2>
-              <span className="text-sm text-emerald-700">专家库已接入</span>
+              <h2 className="text-2xl font-black text-gray-950">{selectedCategory ? selectedCategory.name : '选择一个判断模型'}</h2>
+              <span className="text-sm text-emerald-700">{selectedCategory ? selectedCategory.description : 'AI 已接入，随时可调用'}</span>
             </div>
+            {selectedCategory && (
+              <button
+                type="button"
+                onClick={() => setSelectedCategoryId(null)}
+                className="rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-black text-gray-700 hover:border-emerald-300 hover:text-emerald-700"
+              >
+                全部方法
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {(sortedExperts || EXPERT_PLACEHOLDER).map((expert, i) => {
+            {(displayedExperts || EXPERT_PLACEHOLDER).map((expert, i) => {
               const display = expert ? getExpertDisplay(expert.id) : null;
               const avatar = expert?.avatar || display?.avatar;
               const category = expert ? EXPERT_CATEGORY_BY_ID.get(expert.id) : null;
@@ -160,7 +172,7 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
                   onClick={() => {
                     if (!expert) return;
                     if (isCreditsExhausted) {
-                      showToast('积分已用完，补充后才能发起新咨询。');
+                      showToast('积分已用完，补充后才能开启新对话。');
                       return;
                     }
                     onSelectExpert(expert.id);
@@ -202,12 +214,12 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
 
         {conversations.length > 0 && (
           <section>
-            <h2 className="mb-4 text-2xl font-black text-gray-950">历史对话</h2>
+            <h2 className="mb-4 text-2xl font-black text-gray-950">历史记录</h2>
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="搜索对话..."
+              placeholder="搜索记录..."
               className="mb-3 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
             />
             <div className="space-y-2">
@@ -254,7 +266,7 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
                     </div>
                     <button
                       onClick={() => {
-                        if (window.confirm('确定删除此对话？')) {
+                        if (window.confirm('确定删除此记录？')) {
                           deleteConversation(conv.id).then(() => {
                             setConversations(prev => prev.filter(c => c.id !== conv.id));
                           }).catch(() => showToast('删除失败'));

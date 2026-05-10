@@ -238,8 +238,8 @@ const PANEL_CONFIGS: Record<string, PanelConfig> = {
     ],
   },
   default: {
-    title: '咨询信息单',
-    intro: '把背景、目标和约束先讲清楚，专家再追问关键变量。',
+    title: '信息判断单',
+    intro: '把背景、目标和约束先讲清楚，AI 再追问关键变量。',
     quickQuestions: ['帮我拆一下这个问题', '我现在卡住了怎么办', '给我一个可执行方案'],
     defaults: { background: '', target: '', constraints: '', currentAction: '' },
     fields: [
@@ -338,7 +338,7 @@ export default function ChatPage({ userId, conversationId, expertId, expertName,
     const parts = [
       text.trim(),
       '',
-      '【本次咨询设置】',
+      '【本次 AI 判断设置】',
       `回复长度：${replyLength}`,
       `沟通方式：${askStyle}`,
       `希望产出：${outputStyle}`,
@@ -415,7 +415,7 @@ export default function ChatPage({ userId, conversationId, expertId, expertName,
             首页
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-black text-emerald-950">{expertName || meta.alias}</h1>
+          <h1 className="truncate text-base font-black text-emerald-950">{expertName || meta.alias}</h1>
             <p className="truncate text-xs text-stone-500">{conversationTitle || meta.title}</p>
           </div>
         </div>
@@ -438,7 +438,7 @@ export default function ChatPage({ userId, conversationId, expertId, expertName,
             </div>
 
             <div className="rounded-3xl border border-stone-200 bg-white/85 p-4 shadow-sm">
-              <h2 className="text-base font-black text-stone-900">{panel.title}</h2>
+                <h2 className="text-base font-black text-stone-900">{panel.title}</h2>
               <p className="mt-1 text-xs leading-5 text-stone-500">{panel.intro}</p>
               <div className="mt-4 space-y-4">
                 {panel.fields.map(field => (
@@ -451,7 +451,7 @@ export default function ChatPage({ userId, conversationId, expertId, expertName,
             </div>
 
             <div className="rounded-3xl border border-stone-200 bg-white/85 p-4 shadow-sm">
-              <h2 className="text-base font-black text-stone-900">咨询设置</h2>
+              <h2 className="text-base font-black text-stone-900">判断设置</h2>
               <p className="mt-1 text-xs leading-5 text-stone-500">不用懂专业词，只调整你想要的沟通方式。</p>
               <div className="mt-4 space-y-4">
                 <Segment label="回复长度" value={replyLength} options={['短一点', '正常', '详细']} onChange={setReplyLength} />
@@ -475,7 +475,7 @@ export default function ChatPage({ userId, conversationId, expertId, expertName,
                   </div>
                 </div>
                 <div className="rounded-3xl border border-dashed border-stone-300 bg-white/55 p-5 text-sm leading-6 text-stone-500">
-                  左侧信息填得越像真实任务，专家越能少追问、直接判断。没把握的地方可以空着，先用自己的话讲也可以。
+                  左侧信息填得越像真实任务，系统越能少追问、直接判断。没把握的地方可以空着，先用自己的话讲也可以。
                 </div>
               </>
             )}
@@ -512,7 +512,7 @@ export default function ChatPage({ userId, conversationId, expertId, expertName,
 {creditBlocked && (
             <div className="mb-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
               <p className="font-black">积分不足，暂时不能继续提问</p>
-              <p className="mt-1 text-xs leading-5 text-red-700">本次没有扣分。请返回专家页查看余额，补充积分后再继续咨询。</p>
+              <p className="mt-1 text-xs leading-5 text-red-700">本次没有扣分。请返回 AI 外脑查看余额，补充积分后再继续使用。</p>
               <button type="button" onClick={onOpenCredits} className="mt-3 rounded-full bg-red-700 px-3 py-1.5 text-xs font-black text-white hover:bg-red-600">
                 去积分中心
               </button>
@@ -525,7 +525,7 @@ export default function ChatPage({ userId, conversationId, expertId, expertName,
             value={input}
             onChange={event => setInput(event.target.value)}
             onKeyDown={event => event.key === 'Enter' && sendText(input)}
-            placeholder={sending ? '等专家追问或判断中...' : '先随便说，不清楚也没关系'}
+            placeholder={sending ? '等 AI 追问或判断中...' : '先随便说，不清楚也没关系'}
             className="flex-1 rounded-2xl border border-stone-300 bg-white/80 px-4 py-2.5 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-emerald-700 focus:ring-1 focus:ring-emerald-700/20"
           />
           <button onClick={() => sendText(input)} disabled={sending || !input.trim()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-900 text-white shadow transition hover:bg-emerald-800 disabled:opacity-40" title="发送">

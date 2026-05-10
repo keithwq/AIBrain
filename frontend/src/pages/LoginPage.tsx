@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { quickLogin } from '../services/api';
 import { showToast } from '../components/toastStore';
+import { getExpertDisplay } from '../data/experts';
 
 interface Props {
   onLogin: (userId: string, nickname: string) => void;
@@ -27,29 +28,91 @@ export default function LoginPage({ onLogin }: Props) {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <form onSubmit={handleSubmit} className="w-full max-w-sm rounded-lg bg-white p-8 shadow-md">
-        <h1 className="mb-3 text-center text-2xl font-black text-gray-950">专家咨询</h1>
-        <p className="mb-6 text-center text-sm leading-6 text-gray-500">
-          使用邮箱注册或登录，新用户可获得体验积分。
-        </p>
-        <input
-          type="email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          placeholder="请输入邮箱"
-          maxLength={50}
-          className="mb-4 w-full rounded border border-gray-300 px-3 py-2 focus:border-emerald-600 focus:outline-none"
-          autoFocus
-        />
-        <button
-          type="submit"
-          disabled={loading || !email.trim()}
-          className="w-full rounded bg-emerald-800 py-2 font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
-        >
-          {loading ? '进入中...' : '进入首页'}
-        </button>
-      </form>
+    <div className="min-h-screen bg-[#f4efe4] px-4 py-6 md:px-6 md:py-8">
+      <div className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-6xl gap-6 md:grid-cols-[1.1fr_0.9fr] md:items-center">
+        <section className="hidden h-full overflow-hidden rounded-[28px] border border-white/70 bg-white/55 p-8 shadow-[0_24px_80px_rgba(0,0,0,0.08)] md:block">
+          <div className="flex h-full flex-col justify-between">
+            <div>
+              <p className="text-sm font-black text-emerald-800">AI外脑</p>
+              <h1 className="mt-4 max-w-xl text-5xl font-black leading-[1.05] text-stone-950">
+                让 AI 像你的
+                <br />
+                硅基分身一样工作。
+              </h1>
+              <p className="mt-6 max-w-lg text-base leading-7 text-stone-600">
+                登录后进入 AI 外脑、积分中心和商城。
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl bg-stone-950 px-4 py-4 text-white">
+                <p className="text-sm font-black">先拆解</p>
+                <p className="mt-2 text-xs text-white/70">识别场景和关键变量</p>
+              </div>
+              <div className="rounded-2xl bg-white px-4 py-4 text-stone-950 shadow-sm">
+                <p className="text-sm font-black">再判断</p>
+                <p className="mt-2 text-xs text-stone-500">匹配模型和路径</p>
+              </div>
+              <div className="rounded-2xl bg-emerald-100 px-4 py-4 text-emerald-950">
+                <p className="text-sm font-black">再输出</p>
+                <p className="mt-2 text-xs text-emerald-700">结论 / 清单 / 下一步</p>
+              </div>
+            </div>
+
+            <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {['wangdingjun', 'zhangxuefeng', 'steve-jobs', 'luoxiang'].map(id => {
+                const display = getExpertDisplay(id);
+                return (
+                  <div key={id} className="flex items-center gap-3 rounded-2xl bg-white/85 p-3 shadow-sm">
+                    <div className="h-12 w-12 overflow-hidden rounded-full bg-emerald-50">
+                      <img src={display.avatar} alt={display.alias} className="h-full w-full object-cover" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-black text-stone-950">{display.alias}</p>
+                      <p className="truncate text-xs text-stone-500">{display.shortTitle}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section className="flex items-center justify-center">
+          <form onSubmit={handleSubmit} className="w-full max-w-md rounded-[28px] border border-white/80 bg-white p-8 shadow-[0_24px_80px_rgba(0,0,0,0.08)] md:p-10">
+            <div className="mb-8">
+              <p className="text-sm font-black text-emerald-700 md:hidden">AI外脑</p>
+              <h2 className="mt-2 text-center text-2xl font-black text-gray-950 md:text-left md:text-3xl">
+                自助注册
+              </h2>
+              <p className="mt-3 text-center text-sm leading-6 text-gray-500 md:text-left">
+                使用邮箱注册或登录，领取体验积分后进入 AI 外脑。
+              </p>
+            </div>
+            <label className="block">
+              <span className="mb-2 block text-xs font-black uppercase tracking-wide text-stone-500">
+                邮箱
+              </span>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="请输入邮箱"
+                maxLength={50}
+                className="mb-5 w-full rounded-2xl border border-stone-300 px-4 py-3 text-base outline-none transition placeholder:text-stone-400 focus:border-emerald-600"
+                autoFocus
+              />
+            </label>
+              <button
+                type="submit"
+                disabled={loading || !email.trim()}
+                className="w-full rounded-2xl bg-stone-950 py-3.5 text-sm font-black text-white transition hover:bg-stone-800 disabled:opacity-50"
+              >
+              {loading ? '进入中...' : '进入系统'}
+              </button>
+          </form>
+        </section>
+      </div>
     </div>
   );
 }

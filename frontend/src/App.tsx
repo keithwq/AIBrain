@@ -13,8 +13,8 @@ const LS_USER_ID = 'aibrain_user_id';
 const LS_NICKNAME = 'aibrain_nickname';
 
 type View =
-  | { page: 'login' }
   | { page: 'home' }
+  | { page: 'login' }
   | { page: 'experts' }
   | { page: 'credits' }
   | { page: 'chat'; conversationId: string; expertId: string; expertName: string };
@@ -37,7 +37,7 @@ function clearSession() {
 
 function App() {
   const session = loadSession();
-  const [view, setView] = useState<View>(() => (session ? { page: 'home' } : { page: 'login' }));
+  const [view, setView] = useState<View>({ page: 'home' });
   const [userId, setUserId] = useState(() => session?.userId || '');
   const [nickname, setNickname] = useState(() => session?.nickname || '');
 
@@ -76,8 +76,8 @@ function App() {
   }, []);
 
   const handleOpenCredits = useCallback(() => {
-    setView({ page: 'credits' });
-  }, []);
+    setView({ page: userId ? 'credits' : 'login' });
+  }, [userId]);
 
   const handleLogout = () => {
     clearSession();
@@ -104,10 +104,11 @@ function App() {
         <HomePage
           userId={userId}
           nickname={nickname}
-          onOpenExperts={() => setView({ page: 'experts' })}
+          onOpenExperts={() => setView({ page: userId ? 'experts' : 'login' })}
           onOpenCredits={handleOpenCredits}
-          onOpenConversation={handleOpenConversation}
+          onOpenRegister={() => setView({ page: 'login' })}
           onLogout={handleLogout}
+          guest={!userId}
         />
       )}
       {view.page === 'experts' && (

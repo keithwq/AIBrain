@@ -188,13 +188,13 @@ export const EXPERT_DISPLAY: Record<string, ExpertDisplayMeta> = {
 
 export function getExpertDisplay(id: string): ExpertDisplayMeta {
   return EXPERT_DISPLAY[id] || {
-    name: '通用专家',
-    alias: '通用专家',
+    name: '通用方法卡',
+    alias: '通用方法卡',
     title: '专业判断辅助',
     cardIntro: '先追问关键变量，再把模糊问题整理成可执行判断。',
     shortTitle: '专业判断',
     tagline: '追问关键变量，再给可执行判断',
-    promise: '先把背景和约束讲清楚，专家会帮你把模糊问题变成可执行方案。',
+    promise: '先把背景和约束讲清楚，系统会把模糊问题变成可执行方案。',
     accent: 'emerald',
     soft: 'bg-emerald-50',
     avatar: '/experts/steve-jobs.png',
