@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { prisma } from '../prisma';
-import { getCreditsProfile, refundCredits, reserveCredits } from '../credits';
+import { getCreditsProfile, grantCredits, refundCredits, reserveCredits } from '../credits';
 
 vi.mock('../prisma', () => ({
   prisma: {
@@ -70,6 +70,29 @@ describe('credits service', () => {
       id: 'u1',
       nickname: 'Alice',
       credits: 9,
+    });
+  });
+
+  it('grants credits with an updated timestamp', async () => {
+    mockedPrisma.user.update.mockResolvedValue({
+      id: 'u1',
+      nickname: 'Alice',
+      credits: 14,
+    } as never);
+
+    await expect(grantCredits('u1', 5)).resolves.toEqual({
+      id: 'u1',
+      nickname: 'Alice',
+      credits: 14,
+    });
+
+    expect(mockedPrisma.user.update).toHaveBeenCalledWith({
+      where: { id: 'u1' },
+      data: {
+        credits: { increment: 5 },
+        creditsUpdatedAt: expect.any(Date),
+      },
+      select: { id: true, nickname: true, credits: true },
     });
   });
 });

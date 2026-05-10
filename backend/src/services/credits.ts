@@ -36,3 +36,14 @@ export async function refundCredits(userId: string): Promise<CreditsProfile> {
     select: { id: true, nickname: true, credits: true },
   });
 }
+
+export async function grantCredits(userId: string, amount: number): Promise<CreditsProfile> {
+  return prisma.user.update({
+    where: { id: userId },
+    data: {
+      credits: { increment: amount },
+      creditsUpdatedAt: new Date(),
+    },
+    select: { id: true, nickname: true, credits: true },
+  });
+}

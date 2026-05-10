@@ -27,6 +27,7 @@ interface Props {
   nickname: string;
   onSelectExpert: (expertId: string) => void;
   onOpenConversation: (conversationId: string, expertId: string) => void;
+  onOpenCredits: () => void;
   onLogout: () => void;
 }
 
@@ -37,7 +38,7 @@ function Skeleton({ className }: { className?: string }) {
 const EXPERT_PLACEHOLDER = Array(8).fill(null);
 const ORDER_INDEX = new Map<string, number>(FEATURED_EXPERT_ORDER.map((id, index) => [id, index]));
 
-export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenConversation, onLogout }: Props) {
+export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenConversation, onOpenCredits, onLogout }: Props) {
   const [experts, setExperts] = useState<Expert[] | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [credits, setCredits] = useState<number | null>(null);
@@ -78,11 +79,15 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
         <h1 className="text-2xl font-bold text-gray-950">AI外脑</h1>
         <div className="flex items-center gap-4 text-sm text-gray-600">
           {credits !== null ? (
-            <span>剩余积分: <strong className={credits === 0 ? 'text-red-500' : 'text-emerald-600'}>{credits}</strong></span>
+            <button type="button" onClick={onOpenCredits} className="flex items-center gap-1 rounded-full border border-gray-200 px-3 py-1.5 hover:border-emerald-300 hover:bg-emerald-50">
+              <span>剩余积分:</span>
+              <strong className={credits === 0 ? 'text-red-500' : 'text-emerald-600'}>{credits}</strong>
+            </button>
           ) : (
             <Skeleton className="w-20 h-4" />
           )}
           <span>{nickname}</span>
+          <button onClick={onOpenCredits} className="text-emerald-700 hover:underline">积分中心</button>
           <button onClick={onLogout} className="text-blue-600 hover:underline">退出</button>
         </div>
       </header>

@@ -16,6 +16,7 @@ interface Props {
   expertId: string;
   expertName: string;
   onBack: () => void;
+  onOpenCredits: () => void;
 }
 
 type InputType = 'text' | 'textarea' | 'select';
@@ -297,7 +298,7 @@ function Field({ field, value, onChange }: { field: FieldConfig; value: string; 
   );
 }
 
-export default function ChatPage({ userId, conversationId, expertId, expertName, onBack }: Props) {
+export default function ChatPage({ userId, conversationId, expertId, expertName, onBack, onOpenCredits }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -504,10 +505,13 @@ export default function ChatPage({ userId, conversationId, expertId, expertName,
 
       <div className="border-t border-emerald-900/10 bg-[#f7f2e8]/90 px-4 py-3 backdrop-blur">
         <div className="mx-auto max-w-5xl">
-          {creditBlocked && (
+{creditBlocked && (
             <div className="mb-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
               <p className="font-black">积分不足，暂时不能继续提问</p>
               <p className="mt-1 text-xs leading-5 text-red-700">本次没有扣分。请返回专家页查看余额，补充积分后再继续咨询。</p>
+              <button type="button" onClick={onOpenCredits} className="mt-3 rounded-full bg-red-700 px-3 py-1.5 text-xs font-black text-white hover:bg-red-600">
+                去积分中心
+              </button>
             </div>
           )}
           <div className="flex gap-2">

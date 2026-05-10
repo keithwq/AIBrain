@@ -124,3 +124,13 @@ export async function getCredits(userId: string) {
   if (!res.ok) throw new Error('failed to load credits');
   return res.json();
 }
+
+export async function grantCredits(userId: string, amount: number) {
+  const res = await fetch(`${BASE_URL}/users/${userId}/credits/grant`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount }),
+  });
+  if (!res.ok) throw new Error('failed to grant credits');
+  return res.json();
+}

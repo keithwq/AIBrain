@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import LoginPage from './pages/LoginPage';
 import ExpertsPage from './pages/ExpertsPage';
 import ChatPage from './pages/ChatPage';
+import CreditsPage from './pages/CreditsPage';
 import Toast from './components/Toast';
 import { createConversation } from './services/api';
 import { showToast } from './components/toastStore';
@@ -13,6 +14,7 @@ const LS_NICKNAME = 'aibrain_nickname';
 type View =
   | { page: 'login' }
   | { page: 'experts' }
+  | { page: 'credits' }
   | { page: 'chat'; conversationId: string; expertId: string; expertName: string };
 
 function loadSession(): { userId: string; nickname: string } | null {
@@ -67,6 +69,10 @@ function App() {
     });
   }, []);
 
+  const handleOpenCredits = useCallback(() => {
+    setView({ page: 'credits' });
+  }, []);
+
   const handleLogout = () => {
     clearSession();
     setUserId('');
@@ -84,6 +90,7 @@ function App() {
           expertId={view.expertId}
           expertName={view.expertName}
           onBack={() => setView({ page: 'experts' })}
+          onOpenCredits={handleOpenCredits}
         />
       )}
       {view.page === 'experts' && (
@@ -92,7 +99,15 @@ function App() {
           nickname={nickname}
           onSelectExpert={handleSelectExpert}
           onOpenConversation={handleOpenConversation}
+          onOpenCredits={handleOpenCredits}
           onLogout={handleLogout}
+        />
+      )}
+      {view.page === 'credits' && (
+        <CreditsPage
+          userId={userId}
+          nickname={nickname}
+          onBack={() => setView({ page: 'experts' })}
         />
       )}
       {view.page === 'login' && <LoginPage onLogin={handleLogin} />}
