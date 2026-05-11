@@ -24,6 +24,7 @@ services:
     environment:
       DATABASE_URL: "postgresql://aibrain:aibrain@postgres:5432/aibrain?schema=public"
       DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY}"
+      CORS_ORIGIN: "${CORS_ORIGIN}"
       PERSONA_BASE_PATH: "/app/personas"
       PORT: "3001"
     depends_on:
@@ -35,7 +36,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        VITE_API_BASE_URL: http://localhost:3002/api/v1
+        VITE_API_BASE_URL: /api/v1
     ports:
       - "8080:5173"
     depends_on:

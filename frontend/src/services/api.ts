@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:3001/api/v1';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 function authHeaders(token: string): Record<string, string> {
   return { 'Content-Type': 'application/json', 'x-auth-token': token };
