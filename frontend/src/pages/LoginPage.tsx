@@ -33,8 +33,8 @@ export default function LoginPage({ onLogin }: Props) {
         <section className="hidden h-full overflow-hidden rounded-[28px] border border-white/70 bg-white/55 p-8 shadow-[0_24px_80px_rgba(0,0,0,0.08)] md:block">
           <div className="flex h-full flex-col justify-between">
             <div>
-              <p className="text-sm font-black text-emerald-800">AI外脑</p>
-              <h1 className="mt-4 max-w-xl text-5xl font-black leading-[1.05] text-stone-950">
+              <p className="text-sm font-black text-blue-700">AI外脑</p>
+              <h1 className="mt-4 max-w-xl text-6xl font-black leading-[1.05] text-stone-950">
                 让 AI 像你的
                 <br />
                 硅基分身一样工作。
@@ -53,9 +53,9 @@ export default function LoginPage({ onLogin }: Props) {
                 <p className="text-sm font-black">再判断</p>
                 <p className="mt-2 text-xs text-stone-500">匹配模型和路径</p>
               </div>
-              <div className="rounded-2xl bg-emerald-100 px-4 py-4 text-emerald-950">
+              <div className="rounded-2xl bg-blue-100 px-4 py-4 text-blue-950">
                 <p className="text-sm font-black">再输出</p>
-                <p className="mt-2 text-xs text-emerald-700">结论 / 清单 / 下一步</p>
+                <p className="mt-2 text-xs text-blue-700">结论 / 清单 / 下一步</p>
               </div>
             </div>
 
@@ -64,7 +64,7 @@ export default function LoginPage({ onLogin }: Props) {
                 const display = getExpertDisplay(id);
                 return (
                   <div key={id} className="flex items-center gap-3 rounded-2xl bg-white/85 p-3 shadow-sm">
-                    <div className="h-12 w-12 overflow-hidden rounded-full bg-emerald-50">
+                    <div className="h-12 w-12 overflow-hidden rounded-full bg-blue-50">
                       <img src={display.avatar} alt={display.alias} className="h-full w-full object-cover" />
                     </div>
                     <div className="min-w-0">
@@ -79,9 +79,9 @@ export default function LoginPage({ onLogin }: Props) {
         </section>
 
         <section className="flex items-center justify-center">
-          <form onSubmit={handleSubmit} className="w-full max-w-md rounded-[28px] border border-white/80 bg-white p-8 shadow-[0_24px_80px_rgba(0,0,0,0.08)] md:p-10">
+          <form onSubmit={handleSubmit} className="w-full max-w-md rounded-[28px] border border-white/80 bg-white p-8 shadow-[0_24px_80px_rgba(0,0,0,0.08)] md:p-10" style={{ animation: 'fadeUp 0.5s ease both' }}>
             <div className="mb-8">
-              <p className="text-sm font-black text-emerald-700 md:hidden">AI外脑</p>
+              <p className="text-sm font-black text-blue-700 md:hidden">AI外脑</p>
               <h2 className="mt-2 text-center text-2xl font-black text-gray-950 md:text-left md:text-3xl">
                 自助注册
               </h2>
@@ -99,7 +99,7 @@ export default function LoginPage({ onLogin }: Props) {
                 onChange={e => setEmail(e.target.value)}
                 placeholder="请输入邮箱"
                 maxLength={50}
-                className="mb-5 w-full rounded-2xl border border-stone-300 px-4 py-3 text-base outline-none transition placeholder:text-stone-400 focus:border-emerald-600"
+                className="mb-5 w-full rounded-2xl border border-stone-300 px-4 py-3 text-base outline-none transition placeholder:text-stone-400 focus:border-blue-500"
                 autoFocus
               />
             </label>

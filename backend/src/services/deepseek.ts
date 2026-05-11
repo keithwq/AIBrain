@@ -1,7 +1,5 @@
 import OpenAI from 'openai';
-import * as fs from 'fs';
-import * as path from 'path';
-import { WIKI_BASE } from '../config';
+import { loadPersonaSkill } from './personas';
 
 const client = new OpenAI({
   baseURL: 'https://api.deepseek.com',
@@ -143,15 +141,7 @@ const EXPERT_PROTOCOLS: Record<string, ExpertPromptProtocol> = {
 };
 
 export function loadSkill(id: string): string {
-  const skillPath = path.join(WIKI_BASE, `${id}-perspective`, 'SKILL.md');
-  try {
-    if (fs.existsSync(skillPath)) {
-      return fs.readFileSync(skillPath, 'utf-8');
-    }
-  } catch (err) {
-    console.warn(`Failed to load skill for "${id}":`, err);
-  }
-  return '';
+  return loadPersonaSkill(id) || '';
 }
 
 function extractSkillBody(skill: string): string {

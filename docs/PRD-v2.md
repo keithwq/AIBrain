@@ -37,7 +37,8 @@
 
 ## 5. 专家知识库
 
-- **位置**：`D:\WIKI\40_Knowledge\知识资产\Personas\人物原型\`
+- **位置**：默认随后端发布在 `backend/personas/`
+- **外接覆盖**：如需使用独立知识库，可通过 `PERSONA_BASE_PATH` 指向同结构目录
 - **格式**：每位专家一个子目录，包含 `SKILL.md` 文件
 - **示例**：`wangzhigang-perspective\SKILL.md`
 - **内容**：角色扮演规则、心智模型、决策启发式、表达DNA
@@ -112,6 +113,9 @@
 ```
 AiBrain/
 ├── backend/
+│   ├── personas/
+│   │   └── {expert_id}-perspective/
+│   │       └── SKILL.md
 │   ├── src/
 │   │   ├── controllers/
 │   │   ├── services/

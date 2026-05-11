@@ -9,7 +9,7 @@ vi.mock('openai', () => {
   return { default: MockOpenAI };
 });
 
-vi.mock('../../config', () => ({ WIKI_BASE: '/mock/wiki' }));
+vi.mock('../../config', () => ({ PERSONA_BASE: '/mock/personas', WIKI_BASE: '/mock/personas' }));
 
 vi.mock('fs');
 vi.mock('path');

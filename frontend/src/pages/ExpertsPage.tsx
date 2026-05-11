@@ -3,6 +3,7 @@ import { getExperts, getCredits, getConversations, deleteConversation, renameCon
 import { showToast } from '../components/toastStore';
 import { FEATURED_EXPERT_ORDER, getExpertDisplay } from '../data/experts';
 import { EXPERT_CATEGORY_BY_ID, EXPERT_CATEGORIES } from '../data/expertCategories';
+import NavBar from '../components/NavBar';
 
 interface Expert {
   id: string;
@@ -88,30 +89,18 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
   const isCreditsExhausted = credits === 0;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="border-b border-gray-100 bg-white px-6 py-4 shadow-sm">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-          <button onClick={onOpenHome} className="text-sm font-semibold text-emerald-700 hover:text-emerald-900">
-            返回首页
-          </button>
-          <h1 className="text-2xl font-black text-gray-950">AI外脑</h1>
-          <div className="flex items-center gap-3 text-sm text-gray-600">
-            {credits !== null ? (
-              <button type="button" onClick={onOpenCredits} className="flex items-center gap-1 rounded-full border border-gray-200 px-3 py-1.5 hover:border-emerald-300 hover:bg-emerald-50">
-                <span>剩余积分:</span>
-                <strong className={credits === 0 ? 'text-red-500' : 'text-emerald-600'}>{credits}</strong>
-              </button>
-            ) : (
-              <Skeleton className="h-4 w-20" />
-            )}
-            <span>{nickname}</span>
-            <button onClick={onOpenCredits} className="text-emerald-700 hover:underline">积分中心</button>
-            <button onClick={onLogout} className="text-blue-600 hover:underline">退出</button>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-[var(--bg)]">
+      <NavBar userId={userId} nickname={nickname} onOpenHome={onOpenHome} onOpenExperts={() => {}} onOpenCredits={onOpenCredits} onLogout={onLogout} />
 
       <main className="mx-auto max-w-6xl space-y-10 p-6">
+        {credits !== null && (
+          <div className="flex items-center justify-between rounded-2xl border border-black/5 bg-white px-5 py-3 shadow-sm">
+            <span className="text-sm text-[var(--ink-2)]">剩余积分</span>
+            <button onClick={onOpenCredits} className={`text-lg font-black transition hover:opacity-70 ${credits === 0 ? 'text-red-500' : 'text-blue-600'}`}>
+              {credits} 分 →
+            </button>
+          </div>
+        )}
         {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
         {isCreditsExhausted && (
           <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
@@ -133,11 +122,11 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
                 key={group.id}
                 type="button"
                 onClick={() => setSelectedCategoryId(group.id)}
-                className={`rounded-2xl border p-5 text-left shadow-sm transition hover:border-emerald-200 hover:shadow-md ${selectedCategoryId === group.id ? 'border-emerald-300 bg-emerald-50' : 'border-gray-100 bg-white'}`}
+                className={`rounded-2xl border p-5 text-left transition hover:-translate-y-0.5 hover:shadow-md ${selectedCategoryId === group.id ? 'border-blue-300 bg-blue-50 shadow-sm' : 'border-black/5 bg-white shadow-sm'}`}
               >
                 <p className="text-lg font-black text-gray-950">{group.name}</p>
                 <p className="mt-2 text-sm leading-6 text-gray-500">{group.description}</p>
-                <p className="mt-4 text-xs font-semibold text-emerald-700">{group.experts.length} 张方法卡</p>
+                <p className="mt-4 text-xs font-semibold text-blue-600">{group.experts.length} 张方法卡</p>
               </button>
             ))}
           </div>
@@ -147,13 +136,13 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
           <div className="mb-4 flex items-end justify-between gap-3">
             <div>
               <h2 className="text-2xl font-black text-gray-950">{selectedCategory ? selectedCategory.name : '选择一个判断模型'}</h2>
-              <span className="text-sm text-emerald-700">{selectedCategory ? selectedCategory.description : 'AI 已接入，随时可调用'}</span>
+              <span className="text-sm text-blue-600">{selectedCategory ? selectedCategory.description : 'AI 已接入，随时可调用'}</span>
             </div>
             {selectedCategory && (
               <button
                 type="button"
                 onClick={() => setSelectedCategoryId(null)}
-                className="rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-black text-gray-700 hover:border-emerald-300 hover:text-emerald-700"
+                className="rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-black text-gray-700 hover:border-blue-300 hover:text-blue-600"
               >
                 全部方法
               </button>
@@ -178,21 +167,21 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
                     onSelectExpert(expert.id);
                   }}
                   disabled={!expert}
-                  className={`group rounded-lg border border-gray-100 bg-white p-5 text-left shadow-sm transition hover:border-emerald-200 hover:shadow-md ${isCreditsExhausted ? 'opacity-60' : ''} ${!expert ? 'pointer-events-none opacity-40' : ''}`}
+                  className={`group rounded-2xl border border-black/5 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg ${isCreditsExhausted ? 'opacity-60' : ''} ${!expert ? 'pointer-events-none opacity-40' : ''}`}
                 >
                   {expert && display ? (
                     <>
                       <div className="flex items-start gap-4">
-                        <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border border-emerald-100 bg-emerald-50">
+                        <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-full border border-blue-100 bg-blue-50">
                           {avatar ? (
                             <img src={avatar} alt={display.alias} className="h-full w-full object-cover" />
                           ) : (
-                            <span className="text-3xl text-emerald-800">{display.alias[0]}</span>
+                            <span className="text-3xl text-blue-700">{display.alias[0]}</span>
                           )}
                         </div>
                         <div className="min-w-0">
                           <h3 className="truncate text-lg font-black text-gray-950">{display.alias}</h3>
-                          <p className="mt-1 text-[15px] font-semibold text-emerald-700">{display.shortTitle}</p>
+                          <p className="mt-1 text-[15px] font-semibold text-blue-600">{display.shortTitle}</p>
                           <p className="mt-3 truncate text-sm leading-6 text-gray-600">{display.cardIntro}</p>
                           {category && <p className="mt-2 text-xs font-semibold text-gray-400">{category.name}</p>}
                         </div>
@@ -220,14 +209,14 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="搜索记录..."
-              className="mb-3 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+              className="mb-3 w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
             />
             <div className="space-y-2">
               {filteredConversations.map(conv => {
                 const display = getExpertDisplay(conv.expertId);
 
                 return (
-                  <div key={conv.id} className="flex items-center justify-between rounded-lg border border-gray-100 bg-white p-4 shadow-sm">
+                  <div key={conv.id} className="flex items-center justify-between rounded-2xl border border-black/5 bg-white p-4 shadow-sm transition hover:shadow-md">
                     <div className="flex-1 text-left">
                       {editingId === conv.id ? (
                         <input
@@ -245,7 +234,7 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
                             }
                           }}
                           onBlur={() => setEditingId(null)}
-                          className="w-full rounded border border-emerald-400 px-1 py-0.5 text-sm outline-none"
+                          className="w-full rounded border border-blue-400 px-1 py-0.5 text-sm outline-none"
                           autoFocus
                         />
                       ) : (
@@ -258,7 +247,7 @@ export default function ExpertsPage({ userId, nickname, onSelectExpert, onOpenCo
                           className="w-full text-left"
                         >
                           <span className="text-sm font-medium text-gray-950">{conv.title}</span>
-                          <span className="ml-2 text-xs text-emerald-700">{display.alias}</span>
+                          <span className="ml-2 text-xs text-blue-600">{display.alias}</span>
                           <span className="ml-2 text-xs text-gray-400">{new Date(conv.createdAt).toLocaleDateString()}</span>
                           <span className="ml-2 text-xs text-blue-600">&rarr;</span>
                         </button>

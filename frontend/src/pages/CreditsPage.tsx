@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getCredits, grantCredits } from '../services/api';
 import { showToast } from '../components/toastStore';
+import NavBar from '../components/NavBar';
 
 interface Props {
   userId: string;
@@ -55,46 +56,36 @@ export default function CreditsPage({ userId, nickname, onBack }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="border-b border-gray-100 bg-white px-6 py-4 shadow-sm">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
-          <button onClick={onBack} className="text-sm font-semibold text-emerald-700 hover:text-emerald-900">
-            返回 AI 外脑
-          </button>
-          <div className="text-right">
-            <p className="text-sm text-gray-500">{nickname}</p>
-            <h1 className="text-xl font-black text-gray-950">积分中心</h1>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-[var(--bg)]">
+      <NavBar userId={userId} nickname={nickname} onOpenHome={onBack} onOpenExperts={onBack} onOpenCredits={() => {}} onLogout={onBack} />
 
       <main className="mx-auto max-w-5xl space-y-6 p-6">
         <section className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
-          <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-sm">
-            <p className="text-sm font-bold text-gray-500">当前可用积分</p>
+          <div className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
+            <p className="text-sm font-bold text-[var(--ink-2)]">当前可用积分</p>
             <div className="mt-4 flex items-end gap-3">
-              <span className={`text-6xl font-black ${credits === 0 ? 'text-red-500' : 'text-emerald-700'}`}>
+              <span className={`text-8xl font-black leading-none ${credits === 0 ? 'text-red-500' : 'text-blue-600'}`}>
                 {credits ?? '--'}
               </span>
-              <span className="pb-2 text-sm text-gray-500">分</span>
+              <span className="pb-2 text-sm text-[var(--ink-2)]">分</span>
             </div>
-            <p className="mt-4 text-sm leading-6 text-gray-600">
+            <p className="mt-4 text-sm leading-6 text-[var(--ink-2)]">
               每完成一次有效回答消耗 1 积分。AI 服务失败时会退回本次预留的积分。
             </p>
           </div>
 
-          <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-black text-gray-950">积分规则</h2>
+          <div className="rounded-2xl border border-black/5 bg-white p-6 shadow-sm">
+            <h2 className="text-lg font-black text-[var(--ink)]">积分规则</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-lg bg-emerald-50 p-4">
-                <p className="text-sm font-black text-emerald-900">发问前检查</p>
-                <p className="mt-2 text-xs leading-5 text-emerald-800">余额为 0 时不会进入系统回答。</p>
+              <div className="rounded-2xl bg-blue-50 p-4">
+                <p className="text-sm font-black text-blue-900">发问前检查</p>
+                <p className="mt-2 text-xs leading-5 text-blue-800">余额为 0 时不会进入系统回答。</p>
               </div>
-              <div className="rounded-lg bg-sky-50 p-4">
+              <div className="rounded-2xl bg-sky-50 p-4">
                 <p className="text-sm font-black text-sky-900">成功后消耗</p>
                 <p className="mt-2 text-xs leading-5 text-sky-800">一次有效回答扣 1 分，便于理解成本。</p>
               </div>
-              <div className="rounded-lg bg-stone-100 p-4">
+              <div className="rounded-2xl bg-stone-100 p-4">
                 <p className="text-sm font-black text-stone-900">失败会退回</p>
                 <p className="mt-2 text-xs leading-5 text-stone-700">接口异常或无回复时不让用户承担损失。</p>
               </div>
@@ -117,12 +108,12 @@ export default function CreditsPage({ userId, nickname, onBack }: Props) {
                 type="button"
                 onClick={() => handleSupply(item.amount)}
                 disabled={loadingAmount !== null}
-                className="rounded-lg border border-gray-100 bg-white p-5 text-left shadow-sm transition hover:border-emerald-200 hover:shadow-md disabled:opacity-50"
+                className="rounded-2xl border border-black/5 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg disabled:opacity-50"
               >
                 <p className="text-sm font-black text-gray-950">{item.title}</p>
-                <p className="mt-3 text-3xl font-black text-emerald-700">+{item.amount}</p>
+                <p className="mt-3 text-3xl font-black text-blue-600">+{item.amount}</p>
                 <p className="mt-3 text-xs leading-5 text-gray-500">{item.description}</p>
-                <span className="mt-4 inline-flex rounded-full bg-emerald-900 px-3 py-1.5 text-xs font-black text-white">
+                <span className="mt-4 inline-flex rounded-full bg-blue-900 px-3 py-1.5 text-xs font-black text-white">
                   {loadingAmount === item.amount ? '补充中...' : '领取积分'}
                 </span>
               </button>
