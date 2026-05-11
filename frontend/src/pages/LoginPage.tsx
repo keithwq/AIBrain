@@ -12,6 +12,7 @@ export default function LoginPage({ onLogin }: Props) {
   const [loading, setLoading] = useState(false);
   const [wechatEnabled, setWechatEnabled] = useState(false);
   const [wechatLoading, setWechatLoading] = useState(false);
+  const showDevLogin = new URLSearchParams(window.location.search).get('dev_login') === '1';
 
   useEffect(() => {
     getWechatConfig()
@@ -127,41 +128,44 @@ export default function LoginPage({ onLogin }: Props) {
               {wechatLoading ? '正在打开微信...' : '微信扫码登录'}
             </button>
 
-            {!wechatEnabled && (
+            {!wechatEnabled && showDevLogin && (
               <p className="mt-3 rounded-2xl bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-700">
-                微信开放平台参数未配置，当前仍可用测试登录。
+                微信开放平台参数未配置，当前为内部测试入口。
               </p>
             )}
 
-            <div className="my-7 flex items-center gap-3">
-              <div className="h-px flex-1 bg-stone-200" />
-              <span className="text-xs font-black text-stone-400">测试入口</span>
-              <div className="h-px flex-1 bg-stone-200" />
-            </div>
+            {showDevLogin && (
+              <>
+                <div className="my-7 flex items-center gap-3">
+                  <div className="h-px flex-1 bg-stone-200" />
+                  <span className="text-xs font-black text-stone-400">内部测试</span>
+                  <div className="h-px flex-1 bg-stone-200" />
+                </div>
 
-            <form onSubmit={handleSubmit}>
-              <label className="block">
-                <span className="mb-2 block text-xs font-black uppercase tracking-wide text-stone-500">
-                  昵称
-                </span>
-                <input
-                  type="text"
-                  value={nickname}
-                  onChange={e => setNickname(e.target.value)}
-                  placeholder="请输入测试昵称"
-                  maxLength={50}
-                  className="mb-5 w-full rounded-2xl border border-stone-300 px-4 py-3 text-base outline-none transition placeholder:text-stone-400 focus:border-blue-500"
-                  autoFocus
-                />
-              </label>
-              <button
-                type="submit"
-                disabled={loading || !nickname.trim()}
-                className="w-full rounded-2xl bg-stone-950 py-3.5 text-sm font-black text-white transition hover:bg-stone-800 disabled:opacity-50"
-              >
-                {loading ? '进入中...' : '测试登录'}
-              </button>
-            </form>
+                <form onSubmit={handleSubmit}>
+                  <label className="block">
+                    <span className="mb-2 block text-xs font-black uppercase tracking-wide text-stone-500">
+                      昵称
+                    </span>
+                    <input
+                      type="text"
+                      value={nickname}
+                      onChange={e => setNickname(e.target.value)}
+                      placeholder="请输入测试昵称"
+                      maxLength={50}
+                      className="mb-5 w-full rounded-2xl border border-stone-300 px-4 py-3 text-base outline-none transition placeholder:text-stone-400 focus:border-blue-500"
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    disabled={loading || !nickname.trim()}
+                    className="w-full rounded-2xl bg-stone-950 py-3.5 text-sm font-black text-white transition hover:bg-stone-800 disabled:opacity-50"
+                  >
+                    {loading ? '进入中...' : '测试登录'}
+                  </button>
+                </form>
+              </>
+            )}
           </div>
         </section>
       </div>
