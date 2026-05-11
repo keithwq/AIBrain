@@ -4,7 +4,7 @@
 
 - **技术栈**: Node.js + TypeScript + Express + Prisma + PostgreSQL（后端）, React + TypeScript + TailwindCSS + Vite（前端）, DeepSeek API（LLM）
 - **架构**: LLM + WIKI（预编译知识，不用 RAG）
-- **专家 persona**: 从 `D:\WIKI\40_Knowledge 知识资产\Personas 人物原型\{id}-perspective\SKILL.md` 读取作为 system prompt
+- **专家 persona**: 默认从项目内 `backend/personas/{id}-perspective/SKILL.md` 读取作为 system prompt；只有外接知识库时才用 `PERSONA_BASE_PATH` 覆盖
 
 ## 开发命令
 
@@ -40,6 +40,8 @@ docker-compose up        # 一键启动全栈
 DATABASE_URL="postgresql://aibrain:aibrain@localhost:5432/aibrain?schema=public"
 DEEPSEEK_API_KEY=your-deepseek-api-key
 PORT=3001
+# 可选：默认读取 backend/personas，外接知识库时才配置
+# PERSONA_BASE_PATH=/absolute/path/to/personas
 ```
 
 ## 数据库

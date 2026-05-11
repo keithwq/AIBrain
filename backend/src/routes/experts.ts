@@ -1,7 +1,5 @@
 import { Router } from 'express';
-import * as fs from 'fs';
-import * as path from 'path';
-import { WIKI_BASE } from '../config';
+import { loadPersonaSkill } from '../services/personas';
 
 const router = Router();
 
@@ -150,15 +148,7 @@ const experts: Expert[] = [
 ];
 
 function loadSkillContent(expertId: string): string | null {
-  const skillPath = path.join(WIKI_BASE, `${expertId}-perspective`, 'SKILL.md');
-  try {
-    if (fs.existsSync(skillPath)) {
-      return fs.readFileSync(skillPath, 'utf-8');
-    }
-  } catch (err) {
-    console.warn(`Failed to load skill for "${expertId}":`, err);
-  }
-  return null;
+  return loadPersonaSkill(expertId);
 }
 
 router.get('/', (_req, res) => {

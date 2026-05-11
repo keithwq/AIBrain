@@ -1,9 +1,36 @@
 @import "tailwindcss";
 
+:root {
+  --bg: #fafaf8;
+  --surface: #ffffff;
+  --ink: #0a0a0a;
+  --ink-2: #6b7280;
+  --accent: #2563EB;
+  --font: 'PingFang SC', 'PingFang TC', 'Helvetica Neue', 'Microsoft YaHei', 'Inter', system-ui, sans-serif;
+}
+
 body {
   margin: 0;
+  font-family: var(--font);
+  background: var(--bg);
 }
 
 #root {
   min-height: 100svh;
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+
+.reveal.in {
+  opacity: 1;
+  transform: none;
 }
