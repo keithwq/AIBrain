@@ -25,6 +25,13 @@ services:
       DATABASE_URL: "postgresql://aibrain:aibrain@postgres:5432/aibrain?schema=public"
       DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY}"
       CORS_ORIGIN: "${CORS_ORIGIN}"
+      PUBLIC_ORIGIN: "${PUBLIC_ORIGIN}"
+      FRONTEND_ORIGIN: "${FRONTEND_ORIGIN}"
+      WECHAT_APP_ID: "${WECHAT_APP_ID}"
+      WECHAT_APP_SECRET: "${WECHAT_APP_SECRET}"
+      WECHAT_REDIRECT_URI: "${WECHAT_REDIRECT_URI}"
+      WECHAT_STATE_SECRET: "${WECHAT_STATE_SECRET}"
+      ALLOW_NICKNAME_LOGIN: "${ALLOW_NICKNAME_LOGIN:-true}"
       PERSONA_BASE_PATH: "/app/personas"
       PORT: "3001"
     depends_on:

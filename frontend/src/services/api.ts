@@ -14,6 +14,18 @@ export async function quickLogin(nickname: string) {
   return res.json();
 }
 
+export async function getWechatConfig() {
+  const res = await fetch(`${BASE_URL}/auth/wechat/config`);
+  if (!res.ok) throw new Error('failed to load wechat config');
+  return res.json();
+}
+
+export async function getWechatLoginUrl() {
+  const res = await fetch(`${BASE_URL}/auth/wechat/login-url`);
+  if (!res.ok) throw new Error('wechat login is not configured');
+  return res.json();
+}
+
 export async function getExperts() {
   const res = await fetch(`${BASE_URL}/experts`);
   if (!res.ok) throw new Error('failed to load experts');

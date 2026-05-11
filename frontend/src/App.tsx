@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import ExpertsPage from './pages/ExpertsPage';
@@ -53,6 +53,34 @@ function App() {
     setToken(tok);
     setView({ page: 'home' });
   };
+
+  useEffect(() => {
+    const handleWechatMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== 'aibrain:wechat-login') return;
+      const payload = event.data.payload;
+      if (payload?.user_id && payload?.nickname && payload?.token) {
+        handleLogin(payload.user_id, payload.nickname, payload.token);
+      }
+    };
+
+    window.addEventListener('message', handleWechatMessage);
+
+    const params = new URLSearchParams(window.location.search);
+    const rawWechatLogin = params.get('wechat_login');
+    if (rawWechatLogin) {
+      const loginParams = new URLSearchParams(rawWechatLogin);
+      const uid = loginParams.get('user_id');
+      const nick = loginParams.get('nickname');
+      const tok = loginParams.get('token');
+      if (uid && nick && tok) {
+        handleLogin(uid, nick, tok);
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    }
+
+    return () => window.removeEventListener('message', handleWechatMessage);
+  }, []);
 
   const handleOpenHome = useCallback(() => {
     setView({ page: 'home' });
