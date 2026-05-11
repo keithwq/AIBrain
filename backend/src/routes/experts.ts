@@ -17,7 +17,7 @@ interface Expert {
 const experts: Expert[] = [
   {
     id: 'wangdingjun',
-    name: '王鼎钧',
+    name: '鼎公老师',
     alias: '鼎公老师',
     avatar: '/experts/wangdingjun.png',
     description: '面向教培机构语文老师的作文教学、批改反馈、教研设计与家校沟通顾问。',
@@ -27,7 +27,7 @@ const experts: Expert[] = [
   },
   {
     id: 'zhangxuefeng',
-    name: '张雪峰',
+    name: '冰山先生',
     alias: '冰山先生',
     avatar: '/experts/zhangxuefeng.png',
     description: '升学、专业选择和就业路径判断专家，擅长把家庭条件与现实回报放到同一张图里看。',
@@ -37,7 +37,7 @@ const experts: Expert[] = [
   },
   {
     id: 'wangzhigang',
-    name: '王志纲',
+    name: '战略王子',
     alias: '战略王子',
     avatar: '/experts/wangzhigang.svg',
     description: '战略策划顾问，适合项目定位、资源盘点、城市运营和文旅破局。',
@@ -47,7 +47,7 @@ const experts: Expert[] = [
   },
   {
     id: 'steve-jobs',
-    name: '乔布斯',
+    name: '乔大爷',
     alias: '乔大爷',
     avatar: '/experts/steve-jobs.png',
     description: '产品取舍与体验打磨视角，帮助把复杂产品砍到清晰、锋利、可用。',
@@ -67,7 +67,7 @@ const experts: Expert[] = [
   },
   {
     id: 'yemaozhong',
-    name: '叶茂中',
+    name: '叶将军',
     alias: '叶将军',
     avatar: '/experts/yemaozhong.png',
     description: '冲突营销视角，帮助找到消费者心里的矛盾、记忆点和传播钩子。',
@@ -97,7 +97,7 @@ const experts: Expert[] = [
   },
   {
     id: 'mayun',
-    name: '马云',
+    name: '太极老总',
     alias: '太极老总',
     avatar: '/experts/mayun.png',
     description: '生态、组织与长期格局视角，适合商业趋势、组织能力和合作网络判断。',
@@ -117,7 +117,7 @@ const experts: Expert[] = [
   },
   {
     id: 'wentiejun',
-    name: '温铁军',
+    name: '铁军教授',
     alias: '铁军教授',
     avatar: '/experts/wentiejun.svg',
     description: '政治经济学与三农结构视角，适合制度成本、城乡关系和基层执行分析。',
@@ -127,7 +127,7 @@ const experts: Expert[] = [
   },
   {
     id: 'xuehuashi',
-    name: '薛华石',
+    name: '磁医薛博',
     alias: '磁医薛博',
     avatar: '/experts/xuehuashi.svg',
     description: '磁医学判断顾问，围绕机理、证据和现实边界看技术与产业路径。',

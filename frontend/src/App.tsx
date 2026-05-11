@@ -120,6 +120,7 @@ function App() {
       )}
       {view.page === 'experts' && (
         <ExpertsPage
+          userId={userId}
           token={token}
           nickname={nickname}
           onSelectExpert={handleSelectExpert}

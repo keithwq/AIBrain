@@ -6,6 +6,26 @@ import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
+const CONVERSATION_TITLES: Record<string, string> = {
+  wangdingjun: '鼎公老师',
+  zhangxuefeng: '冰山先生',
+  wangzhigang: '战略王子',
+  'steve-jobs': '乔大爷',
+  luoxiang: '狂徒张三',
+  yemaozhong: '叶将军',
+  luoyonghao: '锤子',
+  fandeng: '老登',
+  mayun: '太极老总',
+  masike: '极客麻薯',
+  wentiejun: '铁军教授',
+  xuehuashi: '磁医薛博',
+  zhanqimin: '肠博士',
+};
+
+function getConversationTitle(expertId: string, fallback?: string) {
+  return fallback || CONVERSATION_TITLES[expertId] || '外脑对话';
+}
+
 router.use(requireAuth);
 
 router.post('/conversations', async (req, res) => {
@@ -16,7 +36,7 @@ router.post('/conversations', async (req, res) => {
   }
 
   const conversation = await prisma.conversation.create({
-    data: { userId: user.id, expertId: expert_id, title: title || expert_id },
+    data: { userId: user.id, expertId: expert_id, title: getConversationTitle(expert_id, title) },
   });
 
   res.json(conversation);
@@ -110,7 +130,7 @@ router.post('/conversations/:id/messages/stream', async (req, res) => {
   });
 
   const msgCount = await prisma.message.count({ where: { conversationId: req.params.id, role: 'user' } });
-  if (msgCount === 1 && conversation.title === conversation.expertId) {
+  if (msgCount === 1 && conversation.title === getConversationTitle(conversation.expertId)) {
     const autoTitle = content.length > 30 ? `${content.slice(0, 30)}...` : content;
     await prisma.conversation.update({ where: { id: req.params.id }, data: { title: autoTitle } });
   }

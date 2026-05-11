@@ -29,7 +29,7 @@ export interface ExpertDisplayMeta {
 
 export const EXPERT_DISPLAY: Record<string, ExpertDisplayMeta> = {
   wangdingjun: {
-    name: '王鼎钧',
+    name: '鼎公老师',
     alias: '鼎公老师',
     title: '语文教培工作台',
     cardIntro: '老派文气，教研手感强。',
@@ -41,7 +41,7 @@ export const EXPERT_DISPLAY: Record<string, ExpertDisplayMeta> = {
     avatar: '/experts/wangdingjun.png',
   },
   zhangxuefeng: {
-    name: '张雪峰',
+    name: '冰山先生',
     alias: '冰山先生',
     title: '升学就业判断',
     cardIntro: '说话直，先看现实结果。',
@@ -53,7 +53,7 @@ export const EXPERT_DISPLAY: Record<string, ExpertDisplayMeta> = {
     avatar: '/experts/zhangxuefeng.png',
   },
   wangzhigang: {
-    name: '王志纲',
+    name: '战略王子',
     alias: '战略王子',
     title: '战略定位判断',
     cardIntro: '先找项目的魂和抓手。',
@@ -65,7 +65,7 @@ export const EXPERT_DISPLAY: Record<string, ExpertDisplayMeta> = {
     avatar: '/experts/wangzhigang.svg',
   },
   'steve-jobs': {
-    name: '乔布斯',
+    name: '乔大爷',
     alias: '乔大爷',
     title: '产品取舍判断',
     cardIntro: '挑剔简洁，专治功能臃肿。',
@@ -89,7 +89,7 @@ export const EXPERT_DISPLAY: Record<string, ExpertDisplayMeta> = {
     avatar: '/experts/luoxiang.svg',
   },
   yemaozhong: {
-    name: '叶茂中',
+    name: '叶将军',
     alias: '叶将军',
     title: '冲突营销判断',
     cardIntro: '盯住矛盾和记忆点。',
@@ -125,7 +125,7 @@ export const EXPERT_DISPLAY: Record<string, ExpertDisplayMeta> = {
     avatar: '/experts/fandeng.svg',
   },
   mayun: {
-    name: '马云',
+    name: '太极老总',
     alias: '太极老总',
     title: '商业格局判断',
     cardIntro: '看长期、组织和生态。',
@@ -149,7 +149,7 @@ export const EXPERT_DISPLAY: Record<string, ExpertDisplayMeta> = {
     avatar: '/experts/masike.svg',
   },
   wentiejun: {
-    name: '温铁军',
+    name: '铁军教授',
     alias: '铁军教授',
     title: '结构问题判断',
     cardIntro: '把表面问题放进结构里看。',
@@ -161,7 +161,7 @@ export const EXPERT_DISPLAY: Record<string, ExpertDisplayMeta> = {
     avatar: '/experts/wentiejun.svg',
   },
   xuehuashi: {
-    name: '薛华石',
+    name: '磁医薛博',
     alias: '磁医薛博',
     title: '磁医学判断',
     cardIntro: '先看机理、证据和边界。',
