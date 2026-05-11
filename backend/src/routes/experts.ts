@@ -147,12 +147,13 @@ const experts: Expert[] = [
   },
 ];
 
-function loadSkillContent(expertId: string): string | null {
-  return loadPersonaSkill(expertId);
-}
+// Load all skill files once at startup to avoid repeated disk reads per request.
+const skillCache = new Map<string, string | null>(
+  experts.map(e => [e.id, loadPersonaSkill(e.id)])
+);
 
 router.get('/', (_req, res) => {
-  res.json(experts.map(expert => ({ ...expert, has_skill: loadSkillContent(expert.id) !== null })));
+  res.json(experts.map(expert => ({ ...expert, has_skill: skillCache.get(expert.id) !== null })));
 });
 
 router.get('/:id', (req, res) => {
@@ -161,7 +162,7 @@ router.get('/:id', (req, res) => {
     return res.status(404).json({ error: 'expert not found' });
   }
 
-  res.json({ ...expert, skill: loadSkillContent(expert.id) });
+  res.json({ ...expert, skill: skillCache.get(expert.id) ?? null });
 });
 
 export default router;

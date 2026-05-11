@@ -11,6 +11,7 @@ import { getExpertDisplay } from './data/experts';
 
 const LS_USER_ID = 'aibrain_user_id';
 const LS_NICKNAME = 'aibrain_nickname';
+const LS_TOKEN = 'aibrain_token';
 
 type View =
   | { page: 'home' }
@@ -19,20 +20,23 @@ type View =
   | { page: 'credits' }
   | { page: 'chat'; conversationId: string; expertId: string; expertName: string };
 
-function loadSession(): { userId: string; nickname: string } | null {
+function loadSession(): { userId: string; nickname: string; token: string } | null {
   const userId = localStorage.getItem(LS_USER_ID);
   const nickname = localStorage.getItem(LS_NICKNAME);
-  return userId && nickname ? { userId, nickname } : null;
+  const token = localStorage.getItem(LS_TOKEN);
+  return userId && nickname && token ? { userId, nickname, token } : null;
 }
 
-function saveSession(userId: string, nickname: string) {
+function saveSession(userId: string, nickname: string, token: string) {
   localStorage.setItem(LS_USER_ID, userId);
   localStorage.setItem(LS_NICKNAME, nickname);
+  localStorage.setItem(LS_TOKEN, token);
 }
 
 function clearSession() {
   localStorage.removeItem(LS_USER_ID);
   localStorage.removeItem(LS_NICKNAME);
+  localStorage.removeItem(LS_TOKEN);
 }
 
 function App() {
@@ -40,11 +44,13 @@ function App() {
   const [view, setView] = useState<View>({ page: 'home' });
   const [userId, setUserId] = useState(() => session?.userId || '');
   const [nickname, setNickname] = useState(() => session?.nickname || '');
+  const [token, setToken] = useState(() => session?.token || '');
 
-  const handleLogin = (uid: string, nick: string) => {
-    saveSession(uid, nick);
+  const handleLogin = (uid: string, nick: string, tok: string) => {
+    saveSession(uid, nick, tok);
     setUserId(uid);
     setNickname(nick);
+    setToken(tok);
     setView({ page: 'home' });
   };
 
@@ -54,7 +60,7 @@ function App() {
 
   const handleSelectExpert = async (expertId: string) => {
     try {
-      const conv = await createConversation(userId, expertId);
+      const conv = await createConversation(token, expertId);
       setView({
         page: 'chat',
         conversationId: conv.id,
@@ -83,6 +89,7 @@ function App() {
     clearSession();
     setUserId('');
     setNickname('');
+    setToken('');
     setView({ page: 'login' });
   };
 
@@ -91,7 +98,7 @@ function App() {
       <Toast />
       {view.page === 'chat' && (
         <ChatPage
-          userId={userId}
+          token={token}
           conversationId={view.conversationId}
           expertId={view.expertId}
           expertName={view.expertName}
@@ -113,7 +120,7 @@ function App() {
       )}
       {view.page === 'experts' && (
         <ExpertsPage
-          userId={userId}
+          token={token}
           nickname={nickname}
           onSelectExpert={handleSelectExpert}
           onOpenConversation={handleOpenConversation}
@@ -124,7 +131,7 @@ function App() {
       )}
       {view.page === 'credits' && (
         <CreditsPage
-          userId={userId}
+          token={token}
           nickname={nickname}
           onBack={handleOpenHome}
         />

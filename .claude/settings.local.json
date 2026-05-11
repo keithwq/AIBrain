@@ -1,7 +1,15 @@
 {
   "permissions": {
     "allow": [
-      "mcp__Claude_Preview__preview_start"
+      "mcp__Claude_Preview__preview_start",
+      "Bash(docker compose *)",
+      "Bash(npx tsc *)",
+      "Bash(docker stop *)",
+      "Bash(netstat -ano)",
+      "Bash(curl -s http://localhost:3002/api/v1/experts)",
+      "Bash(python -m json.tool --no-ensure-ascii)",
+      "Bash(npm install *)",
+      "Bash(npx prisma *)"
     ]
   }
 }

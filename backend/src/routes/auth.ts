@@ -16,7 +16,7 @@ router.post('/quick-login', async (req, res) => {
   if (!user) {
     user = await prisma.user.create({ data: { nickname: trimmed } });
   }
-  res.json({ user_id: user.id, nickname: user.nickname, credits: user.credits });
+  res.json({ user_id: user.id, nickname: user.nickname, credits: user.credits, token: user.token });
 });
 
 export default router;

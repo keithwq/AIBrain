@@ -1,5 +1,9 @@
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:3001/api/v1';
 
+function authHeaders(token: string): Record<string, string> {
+  return { 'Content-Type': 'application/json', 'x-auth-token': token };
+}
+
 export async function quickLogin(nickname: string) {
   const res = await fetch(`${BASE_URL}/auth/quick-login`, {
     method: 'POST',
@@ -16,55 +20,62 @@ export async function getExperts() {
   return res.json();
 }
 
-export async function createConversation(userId: string, expertId: string, title?: string) {
+export async function createConversation(token: string, expertId: string, title?: string) {
   const res = await fetch(`${BASE_URL}/chat/conversations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_id: userId, expert_id: expertId, title }),
+    headers: authHeaders(token),
+    body: JSON.stringify({ expert_id: expertId, title }),
   });
   if (!res.ok) throw new Error('failed to create conversation');
   return res.json();
 }
 
-export async function renameConversation(conversationId: string, title: string) {
+export async function renameConversation(token: string, conversationId: string, title: string) {
   const res = await fetch(`${BASE_URL}/chat/conversations/${conversationId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(token),
     body: JSON.stringify({ title }),
   });
   if (!res.ok) throw new Error('failed to rename conversation');
   return res.json();
 }
 
-export async function deleteConversation(conversationId: string) {
+export async function deleteConversation(token: string, conversationId: string) {
   const res = await fetch(`${BASE_URL}/chat/conversations/${conversationId}`, {
     method: 'DELETE',
+    headers: { 'x-auth-token': token },
   });
   if (!res.ok) throw new Error('failed to delete conversation');
   return res.json();
 }
 
-export async function getConversation(conversationId: string) {
-  const res = await fetch(`${BASE_URL}/chat/conversations/${conversationId}`);
+export async function getConversation(token: string, conversationId: string) {
+  const res = await fetch(`${BASE_URL}/chat/conversations/${conversationId}`, {
+    headers: { 'x-auth-token': token },
+  });
   if (!res.ok) throw new Error('failed to load conversation');
   return res.json();
 }
 
-export async function getConversations(userId: string) {
-  const res = await fetch(`${BASE_URL}/chat/conversations?user_id=${userId}`);
+export async function getConversations(token: string) {
+  const res = await fetch(`${BASE_URL}/chat/conversations`, {
+    headers: { 'x-auth-token': token },
+  });
   if (!res.ok) throw new Error('failed to load conversations');
   return res.json();
 }
 
-export async function getMessages(conversationId: string) {
-  const res = await fetch(`${BASE_URL}/chat/conversations/${conversationId}/messages`);
+export async function getMessages(token: string, conversationId: string) {
+  const res = await fetch(`${BASE_URL}/chat/conversations/${conversationId}/messages`, {
+    headers: { 'x-auth-token': token },
+  });
   if (!res.ok) throw new Error('failed to load messages');
   return res.json();
 }
 
 export function sendMessageStream(
+  token: string,
   conversationId: string,
-  userId: string,
   content: string,
   onChunk: (text: string) => void,
   onDone: (messageId: string) => void,
@@ -72,7 +83,10 @@ export function sendMessageStream(
 ): AbortController {
   const controller = new AbortController();
 
-  fetch(`${BASE_URL}/chat/conversations/${conversationId}/messages/stream?user_id=${encodeURIComponent(userId)}&content=${encodeURIComponent(content)}`, {
+  fetch(`${BASE_URL}/chat/conversations/${conversationId}/messages/stream`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ content }),
     signal: controller.signal,
   }).then(async response => {
     if (!response.ok) {
@@ -107,7 +121,7 @@ export function sendMessageStream(
             if (data.done) onDone(data.messageId || '');
             if (data.error) onError(data.error);
           } catch {
-            // Ignore incomplete stream fragments until the next complete event arrives.
+            // ignore incomplete fragments
           }
         }
       }
@@ -119,16 +133,18 @@ export function sendMessageStream(
   return controller;
 }
 
-export async function getCredits(userId: string) {
-  const res = await fetch(`${BASE_URL}/users/${userId}/credits`);
+export async function getCredits(token: string) {
+  const res = await fetch(`${BASE_URL}/users/me/credits`, {
+    headers: { 'x-auth-token': token },
+  });
   if (!res.ok) throw new Error('failed to load credits');
   return res.json();
 }
 
-export async function grantCredits(userId: string, amount: number) {
-  const res = await fetch(`${BASE_URL}/users/${userId}/credits/grant`, {
+export async function grantCredits(token: string, amount: number) {
+  const res = await fetch(`${BASE_URL}/users/me/credits/grant`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(token),
     body: JSON.stringify({ amount }),
   });
   if (!res.ok) throw new Error('failed to grant credits');

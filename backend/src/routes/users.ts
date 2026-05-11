@@ -1,31 +1,40 @@
 import { Router } from 'express';
 import { getCreditsProfile, grantCredits } from '../services/credits';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
-router.get('/:user_id/credits', async (req, res) => {
-  const user = await getCreditsProfile(req.params.user_id);
+router.use(requireAuth);
 
-  if (!user) {
+router.get('/me/credits', async (req, res) => {
+  const user = res.locals.user;
+  const profile = await getCreditsProfile(user.id);
+  if (!profile) {
     return res.status(404).json({ error: 'user not found' });
   }
-
-  res.json(user);
+  res.json(profile);
 });
 
-router.post('/:user_id/credits/grant', async (req, res) => {
+router.post('/me/credits/grant', async (req, res) => {
+  const user = res.locals.user;
   const amount = Number(req.body?.amount);
   if (!Number.isInteger(amount) || amount <= 0 || amount > 20) {
     return res.status(400).json({ error: 'amount must be an integer between 1 and 20' });
   }
 
-  const user = await getCreditsProfile(req.params.user_id);
-  if (!user) {
+  const profile = await getCreditsProfile(user.id);
+  if (!profile) {
     return res.status(404).json({ error: 'user not found' });
   }
 
-  const updated = await grantCredits(req.params.user_id, amount);
-  res.json({ ...updated, granted: amount });
+  const MAX_CREDITS = 50;
+  if (profile.credits >= MAX_CREDITS) {
+    return res.status(400).json({ error: `credits already at maximum (${MAX_CREDITS})` });
+  }
+
+  const grantAmount = Math.min(amount, MAX_CREDITS - profile.credits);
+  const updated = await grantCredits(user.id, grantAmount);
+  res.json({ ...updated, granted: grantAmount });
 });
 
 export default router;

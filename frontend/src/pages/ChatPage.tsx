@@ -11,7 +11,7 @@ interface Message {
 }
 
 interface Props {
-  userId: string;
+  token: string;
   conversationId: string;
   expertId: string;
   expertName: string;
@@ -299,8 +299,10 @@ function Field({ field, value, onChange }: { field: FieldConfig; value: string; 
   );
 }
 
-export default function ChatPage({ userId, conversationId, expertId, expertName, onBack, onOpenCredits, onOpenHome }: Props) {
+export default function ChatPage({ token, conversationId, expertId, expertName, onBack, onOpenCredits, onOpenHome }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(true);
+  const [messagesError, setMessagesError] = useState(false);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
@@ -323,12 +325,24 @@ export default function ChatPage({ userId, conversationId, expertId, expertName,
   const formValues = formState.expertId === expertId ? formState.values : panel.defaults;
 
   useEffect(() => {
-    getMessages(conversationId).then(setMessages).catch(() => showToast('加载消息失败'));
-    getConversation(conversationId).then(c => setConversationTitle(c.title)).catch(() => {});
+    setMessagesLoading(true);
+    setMessagesError(false);
+    Promise.all([
+      getMessages(token, conversationId),
+      getConversation(token, conversationId),
+    ]).then(([msgs, conv]) => {
+      setMessages(msgs);
+      setConversationTitle(conv.title);
+    }).catch(() => {
+      setMessagesError(true);
+      showToast('加载消息失败');
+    }).finally(() => {
+      setMessagesLoading(false);
+    });
     return () => {
       abortRef.current?.abort();
     };
-  }, [conversationId]);
+  }, [conversationId, token]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -368,8 +382,8 @@ export default function ChatPage({ userId, conversationId, expertId, expertName,
     setMessages(prev => [...prev, { id: tempId, role: 'user', content: text.trim(), createdAt: new Date().toISOString() }]);
 
     abortRef.current = sendMessageStream(
+      token,
       conversationId,
-      userId,
       buildUserMessage(text),
       chunk => {
         streamingRef.current += chunk;
@@ -462,7 +476,21 @@ export default function ChatPage({ userId, conversationId, expertId, expertName,
           </aside>
 
           <section className="space-y-4">
-            {messages.length === 0 && !sending && (
+            {messagesLoading && (
+              <div className="flex items-center justify-center py-12 text-sm text-stone-400">
+                <svg className="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                加载中...
+              </div>
+            )}
+            {messagesError && (
+              <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                消息加载失败，请返回重试。
+              </div>
+            )}
+            {!messagesLoading && !messagesError && messages.length === 0 && !sending && (
               <>
                 <div className="rounded-3xl border border-stone-200 bg-white/85 p-5 shadow-sm">
                   <h3 className="text-lg font-black text-stone-900">你可以直接问</h3>

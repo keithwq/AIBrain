@@ -4,7 +4,7 @@ import { showToast } from '../components/toastStore';
 import NavBar from '../components/NavBar';
 
 interface Props {
-  userId: string;
+  token: string;
   nickname: string;
   onBack: () => void;
 }
@@ -31,21 +31,21 @@ const SUPPLIES = [
   },
 ];
 
-export default function CreditsPage({ userId, nickname, onBack }: Props) {
+export default function CreditsPage({ token, nickname, onBack }: Props) {
   const [credits, setCredits] = useState<number | null>(null);
   const [loadingAmount, setLoadingAmount] = useState<number | null>(null);
 
   useEffect(() => {
-    getCredits(userId)
+    getCredits(token)
       .then((data: CreditsProfile) => setCredits(data.credits))
       .catch(() => showToast('积分加载失败，请稍后重试。'));
-  }, [userId]);
+  }, [token]);
 
   const handleSupply = async (amount: number) => {
     if (loadingAmount !== null) return;
     setLoadingAmount(amount);
     try {
-      const data = await grantCredits(userId, amount);
+      const data = await grantCredits(token, amount);
       setCredits(data.credits);
       showToast(`已补充 ${amount} 积分`, 'info');
     } catch {
@@ -57,7 +57,7 @@ export default function CreditsPage({ userId, nickname, onBack }: Props) {
 
   return (
     <div className="min-h-screen bg-[var(--bg)]">
-      <NavBar userId={userId} nickname={nickname} onOpenHome={onBack} onOpenExperts={onBack} onOpenCredits={() => {}} onLogout={onBack} />
+      <NavBar userId="" nickname={nickname} onOpenHome={onBack} onOpenExperts={onBack} onOpenCredits={() => {}} onLogout={onBack} />
 
       <main className="mx-auto max-w-5xl space-y-6 p-6">
         <section className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">

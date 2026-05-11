@@ -6,4 +6,4 @@ COPY . .
 RUN npx prisma generate
 RUN npm run build
 RUN npm prune --omit=dev
-CMD ["npm", "start"]
+CMD ["sh", "-c", "npx prisma db push --accept-data-loss && npm start"]

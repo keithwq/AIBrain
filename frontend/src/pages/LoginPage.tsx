@@ -4,22 +4,22 @@ import { showToast } from '../components/toastStore';
 import { getExpertDisplay } from '../data/experts';
 
 interface Props {
-  onLogin: (userId: string, nickname: string) => void;
+  onLogin: (userId: string, nickname: string, token: string) => void;
 }
 
 export default function LoginPage({ onLogin }: Props) {
-  const [email, setEmail] = useState('');
+  const [nickname, setNickname] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const value = email.trim();
+    const value = nickname.trim();
     if (!value) return;
 
     setLoading(true);
     try {
       const data = await quickLogin(value);
-      onLogin(data.user_id, data.nickname);
+      onLogin(data.user_id, data.nickname, data.token);
     } catch {
       showToast('登录失败，请重试。');
     } finally {
@@ -86,18 +86,18 @@ export default function LoginPage({ onLogin }: Props) {
                 自助注册
               </h2>
               <p className="mt-3 text-center text-sm leading-6 text-gray-500 md:text-left">
-                使用邮箱注册或登录，领取体验积分后进入 AI 外脑。
+                输入昵称即可注册或登录，领取体验积分后进入 AI 外脑。
               </p>
             </div>
             <label className="block">
               <span className="mb-2 block text-xs font-black uppercase tracking-wide text-stone-500">
-                邮箱
+                昵称
               </span>
               <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="请输入邮箱"
+                type="text"
+                value={nickname}
+                onChange={e => setNickname(e.target.value)}
+                placeholder="请输入昵称"
                 maxLength={50}
                 className="mb-5 w-full rounded-2xl border border-stone-300 px-4 py-3 text-base outline-none transition placeholder:text-stone-400 focus:border-blue-500"
                 autoFocus
@@ -105,7 +105,7 @@ export default function LoginPage({ onLogin }: Props) {
             </label>
               <button
                 type="submit"
-                disabled={loading || !email.trim()}
+                disabled={loading || !nickname.trim()}
                 className="w-full rounded-2xl bg-stone-950 py-3.5 text-sm font-black text-white transition hover:bg-stone-800 disabled:opacity-50"
               >
               {loading ? '进入中...' : '进入系统'}
