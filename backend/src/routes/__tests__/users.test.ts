@@ -22,6 +22,7 @@ function createRes() {
   const res: any = {
     statusCode: 200,
     body: undefined,
+    locals: { user: { id: 'user-1', nickname: 'Alice', credits: 4 } },
   };
   res.status = (code: number) => {
     res.statusCode = code;
@@ -42,8 +43,8 @@ beforeEach(() => {
 
 describe('users credits routes', () => {
   it('returns the credits profile', async () => {
-    const handler = getHandler('/:user_id/credits', 'get');
-    const req = { params: { user_id: 'user-1' } } as any;
+    const handler = getHandler('/me/credits', 'get');
+    const req = {} as any;
     const res = createRes();
 
     await handler(req, res, vi.fn());
@@ -52,8 +53,8 @@ describe('users credits routes', () => {
   });
 
   it('grants credits with a valid amount', async () => {
-    const handler = getHandler('/:user_id/credits/grant', 'post');
-    const req = { params: { user_id: 'user-1' }, body: { amount: 3 } } as any;
+    const handler = getHandler('/me/credits/grant', 'post');
+    const req = { body: { amount: 3 } } as any;
     const res = createRes();
 
     await handler(req, res, vi.fn());
@@ -63,8 +64,8 @@ describe('users credits routes', () => {
   });
 
   it('rejects invalid grant amounts', async () => {
-    const handler = getHandler('/:user_id/credits/grant', 'post');
-    const req = { params: { user_id: 'user-1' }, body: { amount: 0 } } as any;
+    const handler = getHandler('/me/credits/grant', 'post');
+    const req = { body: { amount: 0 } } as any;
     const res = createRes();
 
     await handler(req, res, vi.fn());

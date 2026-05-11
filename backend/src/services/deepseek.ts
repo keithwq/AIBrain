@@ -1,10 +1,20 @@
 import OpenAI from 'openai';
 import { loadPersonaSkill } from './personas';
 
-const client = new OpenAI({
-  baseURL: 'https://api.deepseek.com',
-  apiKey: process.env.DEEPSEEK_API_KEY!,
-});
+let client: OpenAI | null = null;
+
+function getDeepSeekClient(): OpenAI {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) {
+    throw new Error('DEEPSEEK_API_KEY is required to generate AI replies.');
+  }
+
+  client ||= new OpenAI({
+    baseURL: 'https://api.deepseek.com',
+    apiKey,
+  });
+  return client;
+}
 
 interface ExpertPromptProtocol {
   name: string;
@@ -231,7 +241,7 @@ export async function generateReply(
     { role: 'user', content: userMessage },
   ];
 
-  const response = await client.chat.completions.create({
+  const response = await getDeepSeekClient().chat.completions.create({
     model: 'deepseek-chat',
     messages,
     temperature: 0.55,
@@ -253,7 +263,7 @@ export async function* generateReplyStream(
     { role: 'user', content: userMessage },
   ];
 
-  const stream = await client.chat.completions.create({
+  const stream = await getDeepSeekClient().chat.completions.create({
     model: 'deepseek-chat',
     messages,
     temperature: 0.55,

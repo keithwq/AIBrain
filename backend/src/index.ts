@@ -9,11 +9,6 @@ import usersRoutes from './routes/users';
 
 dotenv.config();
 
-if (!process.env.DEEPSEEK_API_KEY) {
-  console.error('[FATAL] DEEPSEEK_API_KEY is not set — exiting');
-  process.exit(1);
-}
-
 const app = express();
 const port = process.env.PORT || 3001;
 
