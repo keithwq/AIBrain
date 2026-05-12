@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { FEATURED_EXPERT_ORDER, getExpertDisplay } from '../data/experts';
+import { getExpertDisplay } from '../data/experts';
 import NavBar from '../components/NavBar';
 
 interface Props {
@@ -21,7 +21,7 @@ function useReveal() {
   }, []);
 }
 
-const SHOWCASE_IDS = FEATURED_EXPERT_ORDER.slice(0, 8);
+const SHOWCASE_IDS: string[] = [];
 
 export default function HomePage({ userId, nickname, onOpenExperts, onOpenCredits, onOpenRegister, onLogout, guest }: Props) {
   useReveal();
@@ -57,23 +57,39 @@ export default function HomePage({ userId, nickname, onOpenExperts, onOpenCredit
       </section>
 
       {/* Expert strip */}
-      <section className="reveal border-b border-black/5 bg-white py-14">
+      <section className="reveal border-b border-black/5 bg-white py-16">
         <div className="mx-auto max-w-6xl px-6">
-          <p className="mb-8 text-center text-xs font-black uppercase tracking-[0.15em] text-[var(--ink-2)]">已上线专家方法卡</p>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
-            {SHOWCASE_IDS.map(id => {
-              const d = getExpertDisplay(id);
-              return (
-                <button key={id} onClick={onOpenExperts} className="group flex flex-col items-center gap-2 rounded-2xl p-3 transition hover:bg-black/5">
-                  <div className="h-14 w-14 overflow-hidden rounded-full bg-gray-100 ring-2 ring-transparent transition group-hover:ring-blue-400">
-                    <img src={d.avatar} alt={d.alias} className="h-full w-full object-cover" />
-                  </div>
-                  <p className="text-center text-xs font-black text-[var(--ink)]">{d.alias}</p>
-                  <p className="text-center text-[10px] leading-4 text-[var(--ink-2)]">{d.shortTitle}</p>
-                </button>
-              );
-            })}
+          <div className="mx-auto mb-10 max-w-2xl text-center">
+            <p className="text-xs font-black uppercase tracking-[0.15em] text-blue-600">专家库维护</p>
+            <h2 className="mt-3 text-3xl font-black tracking-tight text-[var(--ink)] md:text-4xl">
+              专家正在补蒸馏。
+            </h2>
+            <p className="mt-4 text-sm leading-6 text-[var(--ink-2)]">
+              未达到 5000 行 persona 标准的专家暂不开放，避免半成品方法卡影响判断质量。
+            </p>
           </div>
+          {SHOWCASE_IDS.length > 0 ? (
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+              {SHOWCASE_IDS.map(id => {
+                const d = getExpertDisplay(id);
+                return (
+                  <button key={id} onClick={onOpenExperts} className="group flex min-h-48 flex-col items-center rounded-[24px] border border-black/5 bg-[#f8fafc] p-5 text-center shadow-sm transition hover:-translate-y-1 hover:bg-white hover:shadow-md">
+                    <div className="h-20 w-20 overflow-hidden rounded-3xl bg-white shadow-sm ring-2 ring-transparent transition group-hover:ring-blue-400">
+                      <img src={d.avatar} alt={d.alias} className="h-full w-full object-cover" />
+                    </div>
+                    <p className="mt-4 text-base font-black text-[var(--ink)]">{d.alias}</p>
+                    <p className="mt-1 text-xs font-black text-blue-600">{d.shortTitle}</p>
+                    <p className="mt-3 line-clamp-2 text-xs leading-5 text-[var(--ink-2)]">{d.cardIntro}</p>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-[24px] border border-amber-200 bg-amber-50 px-6 py-7 text-center text-sm leading-6 text-amber-900">
+              <p className="font-black">当前专家库正在补蒸馏，未达到 5000 行标准的专家已全部下架。</p>
+              <p className="mt-1">补足 persona 深度后，专家卡片会重新开放。</p>
+            </div>
+          )}
         </div>
       </section>
 
@@ -84,7 +100,7 @@ export default function HomePage({ userId, nickname, onOpenExperts, onOpenCredit
           <h2 className="max-w-xl text-4xl font-black leading-tight tracking-tight text-white md:text-5xl">结构化输入，<br />可交付输出。</h2>
           <div className="mt-16 grid gap-8 md:grid-cols-3">
             {[
-              { stat: '13+', label: '专家方法卡', desc: '覆盖教育、战略、营销、产品、法律等核心场景，每张卡都有结构化输入面板。' },
+              { stat: '0', label: '当前可用专家', desc: '所有低于 5000 行 persona 标准的专家已临时下架，补足后再开放。' },
               { stat: '1分', label: '每次调用', desc: '透明计费，一次有效回答消耗 1 积分，失败自动退回，不让你承担损失。' },
               { stat: '即时', label: '流式输出', desc: '回答实时流式呈现，不需要等待，像和真人专家对话一样自然。' },
             ].map(f => (

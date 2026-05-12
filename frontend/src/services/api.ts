@@ -1,5 +1,15 @@
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 function authHeaders(token: string): Record<string, string> {
   return { 'Content-Type': 'application/json', 'x-auth-token': token };
 }
@@ -11,6 +21,36 @@ export async function quickLogin(nickname: string) {
     body: JSON.stringify({ nickname }),
   });
   if (!res.ok) throw new Error('login failed');
+  return res.json();
+}
+
+export async function passwordLogin(nickname: string, password: string) {
+  const res = await fetch(`${BASE_URL}/auth/password-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nickname, password }),
+  });
+  if (!res.ok) throw new ApiError(res.status, 'password login failed');
+  return res.json();
+}
+
+export async function sendEmailCode(email: string) {
+  const res = await fetch(`${BASE_URL}/auth/email/send-code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) throw new Error('failed to send email code');
+  return res.json();
+}
+
+export async function emailLogin(email: string, code: string) {
+  const res = await fetch(`${BASE_URL}/auth/email/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, code }),
+  });
+  if (!res.ok) throw new Error('email login failed');
   return res.json();
 }
 
@@ -85,10 +125,32 @@ export async function getMessages(token: string, conversationId: string) {
   return res.json();
 }
 
+export interface Attachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  url: string;
+}
+
+export async function uploadAttachments(token: string, conversationId: string, files: File[]): Promise<Attachment[]> {
+  const form = new FormData();
+  files.forEach(file => form.append('files', file));
+  const res = await fetch(`${BASE_URL}/chat/conversations/${conversationId}/attachments`, {
+    method: 'POST',
+    headers: { 'x-auth-token': token },
+    body: form,
+  });
+  if (!res.ok) throw new Error('附件上传失败，请换一个文件试试。');
+  const data = await res.json();
+  return data.attachments || [];
+}
+
 export function sendMessageStream(
   token: string,
   conversationId: string,
   content: string,
+  attachmentIds: string[],
   onChunk: (text: string) => void,
   onDone: (messageId: string) => void,
   onError: (err: string) => void,
@@ -98,7 +160,7 @@ export function sendMessageStream(
   fetch(`${BASE_URL}/chat/conversations/${conversationId}/messages/stream`, {
     method: 'POST',
     headers: authHeaders(token),
-    body: JSON.stringify({ content }),
+    body: JSON.stringify({ content, attachment_ids: attachmentIds }),
     signal: controller.signal,
   }).then(async response => {
     if (!response.ok) {

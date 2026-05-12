@@ -15,6 +15,8 @@ interface Expert {
   expertise: string[];
   status: string;
   has_skill: boolean;
+  skill_lines?: number;
+  min_ready_skill_lines?: number;
 }
 
 interface Conversation {
@@ -76,6 +78,13 @@ const CATEGORY_VISUALS: Record<string, { icon: string; tone: string; active: str
     mark: 'bg-sky-500',
     action: '做课程、教研、升学判断',
   },
+  family: {
+    icon: '家',
+    tone: 'border-rose-100 bg-rose-50 text-rose-950',
+    active: 'border-rose-400 bg-rose-100 shadow-[0_18px_50px_rgba(244,63,94,0.18)]',
+    mark: 'bg-rose-500',
+    action: '看家庭教育、成长边界、心理抚养',
+  },
   business: {
     icon: '商',
     tone: 'border-amber-100 bg-amber-50 text-amber-950',
@@ -103,6 +112,13 @@ const CATEGORY_VISUALS: Record<string, { icon: string; tone: string; active: str
     active: 'border-emerald-400 bg-emerald-100 shadow-[0_18px_50px_rgba(16,185,129,0.18)]',
     mark: 'bg-emerald-500',
     action: '做症状梳理和医学沟通',
+  },
+  mindfulness: {
+    icon: '静',
+    tone: 'border-indigo-100 bg-indigo-50 text-indigo-950',
+    active: 'border-indigo-400 bg-indigo-100 shadow-[0_18px_50px_rgba(99,102,241,0.18)]',
+    mark: 'bg-indigo-500',
+    action: '做呼吸练习和情绪安顿',
   },
   structure: {
     icon: '构',
@@ -239,11 +255,11 @@ export default function ExpertsPage({ userId, token, nickname, onSelectExpert, o
               </p>
               <div className="mt-8 grid grid-cols-3 gap-3">
                 <div className="border-t border-white/15 pt-4">
-                  <p className="text-2xl font-black">{groupedExperts.length || '-'}</p>
+                  <p className="text-2xl font-black">{groupedExperts.length}</p>
                   <p className="mt-1 text-xs text-white/50">个领域</p>
                 </div>
                 <div className="border-t border-white/15 pt-4">
-                  <p className="text-2xl font-black">{sortedExperts?.length || '-'}</p>
+                  <p className="text-2xl font-black">{sortedExperts?.length ?? '-'}</p>
                   <p className="mt-1 text-xs text-white/50">张方法卡</p>
                 </div>
                 <div className="border-t border-white/15 pt-4">
@@ -367,6 +383,12 @@ export default function ExpertsPage({ userId, token, nickname, onSelectExpert, o
               );
             })}
           </div>
+          {displayedExperts && displayedExperts.length === 0 && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-6 text-sm leading-6 text-amber-900">
+              <p className="font-black">当前没有达到 5000 行蒸馏标准的专家，已全部下架。</p>
+              <p className="mt-1">历史对话仍可查看；新专家会在 persona 补足并通过标准后自动重新上架。</p>
+            </div>
+          )}
         </section>
 
         {(conversations.length > 0 || conversationsError) && (

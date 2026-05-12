@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getConversation, getMessages, sendMessageStream } from '../services/api';
+import ReactMarkdown from 'react-markdown';
+import rehypeKatex from 'rehype-katex';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import { getConversation, getMessages, sendMessageStream, uploadAttachments, type Attachment } from '../services/api';
 import { showToast } from '../components/toastStore';
 import { getExpertDisplay } from '../data/experts';
 
@@ -8,6 +12,7 @@ interface Message {
   role: string;
   content: string;
   createdAt: string;
+  attachments?: Attachment[];
 }
 
 interface Props {
@@ -20,282 +25,206 @@ interface Props {
   onOpenHome: () => void;
 }
 
-type InputType = 'text' | 'textarea' | 'select';
-type ReplyLength = '短一点' | '正常' | '详细';
-type AskStyle = '多追问' | '边问边判' | '直接给建议';
-type OutputStyle = '先聊清楚' | '给路线表' | '给行动清单';
+const TEMP_ID_PREFIX = 'temp-';
 
-interface FieldConfig {
-  key: string;
+const QUICK_QUESTIONS = [
+  '先帮我判断这个问题的关键变量。',
+  '根据我上传的材料，给我一份行动清单。',
+  '请把结论用表格整理出来。',
+];
+
+const MINDFULNESS_QUESTIONS = [
+  '我现在很焦虑，先带我做一个 3 分钟呼吸练习。',
+  '我脑子停不下来，帮我做睡前安顿。',
+  '我很烦躁，帮我把身体和情绪慢慢放下来。',
+];
+
+const WANGDINGJUN_QUESTIONS = [
+  '请先按作文批改模板帮我看这篇作文。',
+  '请把这份材料整理成课堂讲评提纲。',
+  '请生成学生下一步修改任务。',
+];
+
+type WorkbenchFieldKey =
+  | 'clientName'
+  | 'clientBackground'
+  | 'background'
+  | 'goal'
+  | 'material'
+  | 'output'
+  | 'grade'
+  | 'region'
+  | 'textbook'
+  | 'materialType'
+  | 'studentLevel';
+
+interface WorkbenchField {
+  key: WorkbenchFieldKey;
   label: string;
-  type: InputType;
-  placeholder?: string;
+  placeholder: string;
+  rows?: number;
   options?: string[];
 }
 
-interface PanelConfig {
+type WorkbenchValues = Record<WorkbenchFieldKey, string>;
+
+interface WorkbenchCopy {
   title: string;
   intro: string;
-  quickQuestions: string[];
-  fields: FieldConfig[];
-  defaults: Record<string, string>;
+  button: string;
+  prompt: string;
+  outputFallback: string;
+  fields: WorkbenchField[];
 }
 
-const TEMP_ID_PREFIX = '\x00temp\x00';
-
-const PANEL_CONFIGS: Record<string, PanelConfig> = {
-  wangdingjun: {
-    title: '语文教培任务单',
-    intro: '把作文课、批改、续班和家长沟通做成能交付的材料。',
-    quickQuestions: [
-      '帮我设计一节初中作文公开课，目标是转化试听家长',
-      '这篇学生作文怎么批，既指出问题又让家长觉得值',
-      '给我一套寒假作文班的大纲和续班话术',
-    ],
-    defaults: {
-      institutionType: '素养/作文机构',
-      grade: '初中',
-      taskType: '作文课设计',
-      deliverable: '课堂流程+讲义要点',
-      painPoint: '',
-      sourceMaterial: '',
-    },
-    fields: [
-      { key: 'institutionType', label: '机构类型', type: 'select', options: ['素养/作文机构', 'K12 学科机构', '托管晚辅', '线上小班', '校区教研'] },
-      { key: 'grade', label: '学生年级', type: 'select', options: ['小学低段', '小学高段', '初中', '高中'] },
-      { key: 'taskType', label: '本次任务', type: 'select', options: ['作文课设计', '作文批改', '讲义教案', '家长沟通', '续班转化', '老师培训'] },
-      { key: 'deliverable', label: '需要产物', type: 'select', options: ['课堂流程+讲义要点', '逐字稿', '作文批改意见', '家长反馈话术', '课程大纲', '老师培训手册'] },
-      { key: 'painPoint', label: '当前卡点', type: 'textarea', placeholder: '例如：学生没素材、课堂不活跃、家长只看分数、老师不会讲方法' },
-      { key: 'sourceMaterial', label: '作文/教材/案例', type: 'textarea', placeholder: '把学生作文、课题、教材片段或机构要求贴在这里' },
-    ],
-  },
-  zhangxuefeng: {
-    title: '升学就业判断单',
-    intro: '先看分数、地区、投入和目标，再判断路径胜率。',
-    quickQuestions: ['中考成绩不上不下，怎么选路线', '普通二本计算机，考研还是就业', '家里条件一般，专业要不要转'],
-    defaults: { stage: '高考', province: '', level: '中等', scoreRank: '', familyBudget: '一般', goal: '还没想清' },
-    fields: [
-      { key: 'stage', label: '阶段', type: 'select', options: ['中考', '高考', '考研', '就业', '转专业'] },
-      { key: 'province', label: '地区', type: 'text', placeholder: '例如：河南 / 北京 / 江苏' },
-      { key: 'level', label: '当前水平', type: 'select', options: ['偏弱', '中等', '中上', '前列', '不清楚'] },
-      { key: 'scoreRank', label: '分数或排名', type: 'text', placeholder: '例如：年级前30% / 560分' },
-      { key: 'familyBudget', label: '家庭投入', type: 'select', options: ['紧张', '一般', '能投入'] },
-      { key: 'goal', label: '目标', type: 'select', options: ['还没想清', '保底升学', '冲好学校', '尽快就业'] },
-    ],
-  },
-  wangzhigang: {
-    title: '战略定位研判单',
-    intro: '先找项目的魂，再看资源、抓手和破局路径。',
-    quickQuestions: ['这个项目真正的战略抓手是什么', '我这件事该先做品牌、渠道还是产品', '帮我把城市/园区项目讲成一个清楚的战略故事'],
-    defaults: { projectType: '企业项目', currentStage: '起步期', coreResource: '', targetStakeholder: '', bottleneck: '', desiredOutcome: '定位判断+破局路径' },
-    fields: [
-      { key: 'projectType', label: '项目类型', type: 'select', options: ['企业项目', '区域/城市项目', '园区项目', '文旅项目', '教育项目', '个人事业'] },
-      { key: 'currentStage', label: '当前阶段', type: 'select', options: ['想法期', '起步期', '增长期', '转型期', '停滞期'] },
-      { key: 'coreResource', label: '手里资源', type: 'textarea', placeholder: '资金、人、渠道、政策、内容、技术、存量用户等' },
-      { key: 'targetStakeholder', label: '关键对象', type: 'text', placeholder: '客户、政府、投资人、合作方、团队等' },
-      { key: 'bottleneck', label: '最大卡点', type: 'textarea', placeholder: '现在为什么推不动，缺钱、缺信任、缺入口还是缺叙事？' },
-      { key: 'desiredOutcome', label: '需要产物', type: 'select', options: ['定位判断+破局路径', '战略叙事', '资源盘点', '三步行动方案', '对外汇报提纲'] },
-    ],
-  },
-  'steve-jobs': {
-    title: '产品取舍工作台',
-    intro: '先说用户、目标和卡点，再砍掉不必要的功能。',
-    quickQuestions: ['这个首页怎么砍', '功能太多，怎么做 MVP', '这个流程哪里不顺'],
-    defaults: { productName: '', user: '', goal: '', currentStage: 'MVP', painPoint: '', features: '' },
-    fields: [
-      { key: 'productName', label: '产品名称', type: 'text', placeholder: '例如：某 App / 小程序 / 工具' },
-      { key: 'user', label: '目标用户', type: 'text', placeholder: '例如：家长 / 学生 / 商家' },
-      { key: 'goal', label: '核心目标', type: 'text', placeholder: '例如：注册 / 留存 / 转化' },
-      { key: 'currentStage', label: '产品阶段', type: 'select', options: ['探索期', 'MVP', '成长期', '成熟期'] },
-      { key: 'painPoint', label: '最大卡点', type: 'textarea', placeholder: '现在最不顺的地方是什么？' },
-      { key: 'features', label: '现有功能', type: 'textarea', placeholder: '当前已经有哪些功能？' },
-    ],
-  },
-  luoxiang: {
-    title: '法律边界事实单',
-    intro: '先拆事实、证据和角色，再判断能做、慎做、别碰。',
-    quickQuestions: ['这件事有没有法律风险', '合同里这条能不能签', '别人这样做我该怎么留证据'],
-    defaults: { matterType: '合同/合作', role: '', timeline: '', evidence: '', concern: '', expectedResult: '风险分级+下一步' },
-    fields: [
-      { key: 'matterType', label: '事情类型', type: 'select', options: ['合同/合作', '劳动用工', '消费纠纷', '知识产权', '名誉/隐私', '平台纠纷', '其他'] },
-      { key: 'role', label: '你的角色', type: 'text', placeholder: '例如：甲方、乙方、员工、商家、消费者、被投诉方' },
-      { key: 'timeline', label: '发生经过', type: 'textarea', placeholder: '按时间顺序写，谁在什么时候做了什么' },
-      { key: 'evidence', label: '已有材料', type: 'textarea', placeholder: '合同、聊天记录、付款记录、录音、截图、邮件等' },
-      { key: 'concern', label: '最担心什么', type: 'textarea', placeholder: '赔钱、违约、被起诉、影响声誉、无法举证等' },
-      { key: 'expectedResult', label: '需要产物', type: 'select', options: ['风险分级+下一步', '证据清单', '沟通话术', '合同条款提醒', '处理路线'] },
-    ],
-  },
-  yemaozhong: {
-    title: '冲突营销策划单',
-    intro: '找消费者心里的矛盾，把它钉成一句话和一个画面。',
-    quickQuestions: ['这个品牌冲突点是什么', '帮我写一句有记忆点的广告语', '新品上市怎么打第一波传播'],
-    defaults: { category: '', targetUser: '', purchaseConflict: '', competitor: '', productAdvantage: '', outputNeed: '一句话钩子+传播画面' },
-    fields: [
-      { key: 'category', label: '品类/产品', type: 'text', placeholder: '例如：作文课、咖啡、健身房、企业服务' },
-      { key: 'targetUser', label: '目标人群', type: 'text', placeholder: '谁会买，谁会犹豫，谁会传播？' },
-      { key: 'purchaseConflict', label: '购买冲突', type: 'textarea', placeholder: '用户一边想要什么，一边害怕什么？' },
-      { key: 'competitor', label: '竞品/替代品', type: 'textarea', placeholder: '用户不买你时，会买谁，或干脆不买？' },
-      { key: 'productAdvantage', label: '真实优势', type: 'textarea', placeholder: '不能吹，必须能被产品、服务或体验撑住' },
-      { key: 'outputNeed', label: '需要产物', type: 'select', options: ['一句话钩子+传播画面', '广告语备选', '卖点结构', '短视频脚本', '活动主题'] },
-    ],
-  },
-  luoyonghao: {
-    title: '产品表达打磨单',
-    intro: '把卖点讲成人话，把质疑接住，让表达有梗也有底。',
-    quickQuestions: ['这个产品怎么讲得更有说服力', '用户质疑贵，我该怎么回应', '帮我写一段发布会式介绍'],
-    defaults: { product: '', audience: '', scene: '销售介绍', mainSellingPoint: '', objections: '', tone: '真诚直接' },
-    fields: [
-      { key: 'product', label: '产品/服务', type: 'text', placeholder: '你要介绍的东西是什么？' },
-      { key: 'audience', label: '听众是谁', type: 'text', placeholder: '客户、投资人、用户、员工、网友等' },
-      { key: 'scene', label: '表达场景', type: 'select', options: ['销售介绍', '发布会', '直播间', '危机回应', '融资路演', '短视频口播'] },
-      { key: 'mainSellingPoint', label: '核心卖点', type: 'textarea', placeholder: '最好用事实写，不要只写形容词' },
-      { key: 'objections', label: '用户质疑', type: 'textarea', placeholder: '贵、不信、没必要、太复杂、和竞品差不多等' },
-      { key: 'tone', label: '语气', type: 'select', options: ['真诚直接', '锋利一点', '幽默一点', '克制专业', '发布会感'] },
-    ],
-  },
-  fandeng: {
-    title: '知识拆解教学单',
-    intro: '把复杂概念拆成能复述、能教学、能迁移的结构。',
-    quickQuestions: ['这本书怎么讲给普通人听', '帮我把一个复杂概念讲简单', '这节课怎么设计更容易吸收'],
-    defaults: { materialType: '一本书/文章', audience: '', concept: '', useScene: '课程讲解', difficulty: '', outputNeed: '知识卡片+讲述结构' },
-    fields: [
-      { key: 'materialType', label: '材料类型', type: 'select', options: ['一本书/文章', '课程内容', '行业知识', '管理方法', '亲子/心理主题', '演讲稿'] },
-      { key: 'audience', label: '听众对象', type: 'text', placeholder: '普通家长、老师、管理者、学生、创业者等' },
-      { key: 'concept', label: '核心内容', type: 'textarea', placeholder: '把要拆解的观点、段落或目录贴进来' },
-      { key: 'useScene', label: '使用场景', type: 'select', options: ['课程讲解', '读书分享', '短视频脚本', '社群分享', '内部培训'] },
-      { key: 'difficulty', label: '听众难点', type: 'textarea', placeholder: '听不懂、记不住、不愿意听、不会用、容易误解等' },
-      { key: 'outputNeed', label: '需要产物', type: 'select', options: ['知识卡片+讲述结构', '三段式讲稿', '课程大纲', '案例库', '练习题'] },
-    ],
-  },
-  mayun: {
-    title: '商业格局判断单',
-    intro: '从长期趋势、生态位置和组织能力看这件事值不值得做。',
-    quickQuestions: ['这个生意未来有没有空间', '我该怎么搭合作生态', '团队现在最大的问题是什么'],
-    defaults: { businessType: '新业务', market: '', customerValue: '', ecosystemRole: '', organization: '', outputNeed: '格局判断+关键动作' },
-    fields: [
-      { key: 'businessType', label: '业务类型', type: 'select', options: ['新业务', '传统业务转型', '平台/生态', '本地服务', '教育培训', '企业服务'] },
-      { key: 'market', label: '市场变化', type: 'textarea', placeholder: '行业正在变大的原因，或正在变难的原因' },
-      { key: 'customerValue', label: '客户价值', type: 'textarea', placeholder: '你到底帮客户解决什么长期问题？' },
-      { key: 'ecosystemRole', label: '生态位置', type: 'text', placeholder: '入口、工具、平台、服务商、内容方、渠道方等' },
-      { key: 'organization', label: '组织能力', type: 'textarea', placeholder: '团队、文化、执行、现金流、合作伙伴等真实情况' },
-      { key: 'outputNeed', label: '需要产物', type: 'select', options: ['格局判断+关键动作', '商业模式梳理', '合作生态图', '组织问题清单', '长期路线'] },
-    ],
-  },
-  masike: {
-    title: '第一性原理实验单',
-    intro: '把目标、物理约束和成本拆到底，先找最快验证办法。',
-    quickQuestions: ['这件事能不能用第一性原理重拆', '怎么设计一个最小实验', '成本为什么降不下来'],
-    defaults: { goal: '', constraint: '', currentMethod: '', costDriver: '', experiment: '', outputNeed: '最小实验+瓶颈判断' },
-    fields: [
-      { key: 'goal', label: '终局目标', type: 'textarea', placeholder: '如果不考虑惯例，你真正想达到什么？' },
-      { key: 'constraint', label: '硬约束', type: 'textarea', placeholder: '时间、成本、物理条件、技术能力、供应链、人力等' },
-      { key: 'currentMethod', label: '现在做法', type: 'textarea', placeholder: '当前流程或方案是什么，哪里像是沿用惯例？' },
-      { key: 'costDriver', label: '主要成本', type: 'textarea', placeholder: '钱、时间、沟通、材料、算力、失败代价等' },
-      { key: 'experiment', label: '可做实验', type: 'textarea', placeholder: '手里现在能最快验证什么？' },
-      { key: 'outputNeed', label: '需要产物', type: 'select', options: ['最小实验+瓶颈判断', '成本拆解', '技术路线', '反常识方案', '验证计划'] },
-    ],
-  },
-  wentiejun: {
-    title: '结构问题分析单',
-    intro: '把表面问题放进制度成本、历史周期和利益结构里看。',
-    quickQuestions: ['这个问题背后的结构原因是什么', '城乡关系该怎么理解', '帮我分析一个政策/产业变化'],
-    defaults: { topic: '', level: '行业/产业', visibleProblem: '', stakeholders: '', history: '', outputNeed: '结构图+判断' },
-    fields: [
-      { key: 'topic', label: '议题', type: 'text', placeholder: '例如：乡村教育、社区商业、农业项目、区域发展' },
-      { key: 'level', label: '分析层级', type: 'select', options: ['个人处境', '组织/企业', '行业/产业', '城乡区域', '制度政策'] },
-      { key: 'visibleProblem', label: '表面问题', type: 'textarea', placeholder: '现在看起来最突出的矛盾是什么？' },
-      { key: 'stakeholders', label: '相关角色', type: 'textarea', placeholder: '政府、企业、农户、学校、平台、资本、消费者等' },
-      { key: 'history', label: '历史/周期背景', type: 'textarea', placeholder: '这个问题是最近出现，还是长期积累？经历过什么变化？' },
-      { key: 'outputNeed', label: '需要产物', type: 'select', options: ['结构图+判断', '利益关系梳理', '风险提醒', '政策解读', '行动建议'] },
-    ],
-  },
-  xuehuashi: {
-    title: '磁医学研判单',
-    intro: '围绕磁医学的机理、证据和边界，判断下一步怎么验证。',
-    quickQuestions: ['这个磁医学观点怎么判断可信度', '这个方案缺哪类证据', '如何设计一个更稳妥的验证路径'],
-    defaults: { topic: '', mechanism: '', evidence: '', applicationScene: '研究讨论', boundary: '', outputNeed: '证据分层+验证建议' },
-    fields: [
-      { key: 'topic', label: '研究/应用主题', type: 'text', placeholder: '例如：磁场干预、康复场景、疼痛管理、睡眠等' },
-      { key: 'mechanism', label: '机理假设', type: 'textarea', placeholder: '它声称通过什么机制发生作用？' },
-      { key: 'evidence', label: '已有证据', type: 'textarea', placeholder: '论文、实验、病例、设备参数、观察记录等' },
-      { key: 'applicationScene', label: '使用场景', type: 'select', options: ['研究讨论', '产品验证', '科普表达', '临床沟通', '产业判断'] },
-      { key: 'boundary', label: '边界和风险', type: 'textarea', placeholder: '不能替代什么？哪些说法可能过度？' },
-      { key: 'outputNeed', label: '需要产物', type: 'select', options: ['证据分层+验证建议', '机理梳理', '研究问题清单', '科普表达', '风险边界'] },
-    ],
-  },
-  zhanqimin: {
-    title: '肠道健康沟通单',
-    intro: '从症状、检查和就医边界看肠道问题，给出可沟通清单。',
-    quickQuestions: ['这些肠道症状该怎么整理给医生', '益生菌/饮食调整怎么判断是否适合', '哪些情况需要尽快就医'],
-    defaults: { symptom: '', duration: '', checkResult: '', lifestyle: '', redFlag: '', outputNeed: '就医沟通清单' },
-    fields: [
-      { key: 'symptom', label: '主要表现', type: 'textarea', placeholder: '腹痛、腹胀、腹泻、便秘、便血、体重变化等' },
-      { key: 'duration', label: '持续时间', type: 'text', placeholder: '例如：两周、半年、反复多年' },
-      { key: 'checkResult', label: '检查/诊断', type: 'textarea', placeholder: '肠镜、粪便检查、血检、医生诊断、用药记录等' },
-      { key: 'lifestyle', label: '饮食和生活', type: 'textarea', placeholder: '饮食结构、睡眠、压力、运动、饮酒、外卖等' },
-      { key: 'redFlag', label: '警示情况', type: 'textarea', placeholder: '发热、便血、黑便、消瘦、夜间痛、家族史等' },
-      { key: 'outputNeed', label: '需要产物', type: 'select', options: ['就医沟通清单', '检查问题清单', '生活调整建议', '风险分级', '长期记录表'] },
-    ],
-  },
-  default: {
-    title: '信息判断单',
-    intro: '把背景、目标和约束先讲清楚，AI 再追问关键变量。',
-    quickQuestions: ['帮我拆一下这个问题', '我现在卡住了怎么办', '给我一个可执行方案'],
-    defaults: { background: '', target: '', constraints: '', currentAction: '' },
-    fields: [
-      { key: 'background', label: '背景', type: 'textarea', placeholder: '先说发生了什么' },
-      { key: 'target', label: '目标', type: 'text', placeholder: '你想达成什么？' },
-      { key: 'constraints', label: '约束', type: 'textarea', placeholder: '时间、预算、资源、风险' },
-      { key: 'currentAction', label: '已有动作', type: 'textarea', placeholder: '你已经做过什么？' },
-    ],
-  },
+const DEFAULT_WORKBENCH: WorkbenchValues = {
+  clientName: '',
+  clientBackground: '',
+  background: '',
+  goal: '',
+  material: '',
+  output: '判断结论 + 行动清单',
+  grade: '',
+  region: '',
+  textbook: '',
+  materialType: '',
+  studentLevel: '',
 };
 
-function getPanel(expertId: string) {
-  return PANEL_CONFIGS[expertId] || PANEL_CONFIGS.default;
+const MINDFULNESS_WORKBENCH: WorkbenchValues = {
+  clientName: '',
+  clientBackground: '',
+  background: '',
+  goal: '先稳定下来',
+  material: '',
+  output: '安抚语言 + 正念练习步骤',
+  grade: '',
+  region: '',
+  textbook: '',
+  materialType: '',
+  studentLevel: '',
+};
+
+const WANGDINGJUN_WORKBENCH: WorkbenchValues = {
+  clientName: '',
+  clientBackground: '',
+  background: '',
+  goal: '提升表达',
+  material: '',
+  output: '作文批改 + 修改建议',
+  grade: '',
+  region: '',
+  textbook: '',
+  materialType: '',
+  studentLevel: '不确定',
+};
+
+function getInitialWorkbench(expertId: string) {
+  if (expertId === 'wangdingjun') return { ...WANGDINGJUN_WORKBENCH };
+  return expertId === 'thich-nhat-hanh' ? { ...MINDFULNESS_WORKBENCH } : { ...DEFAULT_WORKBENCH };
 }
 
-function MessageText({ content }: { content: string }) {
-  return <div className="whitespace-pre-wrap">{content.replace(/\*\*/g, '')}</div>;
+function getWorkbenchCopy(expertId: string): WorkbenchCopy {
+  if (expertId === 'wangdingjun') {
+    return {
+      title: '作文批改与写作教学工作台',
+      intro: '请先粘贴作文正文，或上传 Word、PDF、文本等可读取资料。王鼎钧只处理作文批改、写作教学、表达训练、作文讲评和日常写作作业反馈。',
+      button: '开始批改',
+      prompt: '请根据作文批改与写作教学工作台信息，完成本次作文批改或写作教学反馈。',
+      outputFallback: '作文批改 + 修改建议',
+      fields: [
+        { key: 'grade', label: '年级', placeholder: '请选择年级', rows: 1, options: ['小学高年级', '初中', '高中'] },
+        { key: 'region', label: '地区', placeholder: '省份或城市，例如：江苏南京', rows: 1 },
+        { key: 'textbook', label: '教材版本', placeholder: '请选择教材版本', rows: 1, options: ['统编版', '人教版', '苏教版', '沪教版', '其他', '不确定'] },
+        { key: 'materialType', label: '材料类型', placeholder: '请选择材料类型', rows: 1, options: ['作文', '试卷', '日常作业', '小练笔', '阅读理解', '其他'] },
+        { key: 'goal', label: '批改目标', placeholder: '请选择批改目标', rows: 1, options: ['提升表达', '应试提分', '课堂讲评', '家长反馈', '学生修改任务'] },
+        { key: 'studentLevel', label: '学生水平', placeholder: '请选择学生水平', rows: 1, options: ['基础薄弱', '中等', '较好', '尖子生', '不确定'] },
+        { key: 'material', label: '作文或材料内容', placeholder: '请粘贴作文正文、题目要求、试卷题干或日常作业内容。暂不支持图片识别。', rows: 8 },
+        { key: 'output', label: '期望产出', placeholder: '请选择期望产出', rows: 1, options: ['作文批改 + 修改建议', '试卷讲评提纲', '日常作业反馈', '家长可读反馈', '学生修改任务'] },
+      ] satisfies WorkbenchField[],
+    };
+  }
+
+  const isMindfulness = expertId === 'thich-nhat-hanh';
+  if (isMindfulness) {
+    return {
+      title: '正念舒缓工作台',
+      intro: '把咨询者、背景、压力来源和身体感受先放进来，附件可以在底部上传。',
+      button: '用工作台开始安顿',
+      prompt: '请根据正念舒缓工作台信息，先安抚咨询者，再给出可跟做的正念练习。',
+      outputFallback: '安抚语言 + 正念练习步骤',
+      fields: [
+        { key: 'clientName', label: '咨询者姓名', placeholder: '姓名 / 称呼，例如：小林、王老师、孩子妈妈', rows: 1 },
+        { key: 'clientBackground', label: '咨询者背景', placeholder: '身份、年龄段、职业/学习状态、最近处境。例如：初三学生，最近考试压力大；创业者，连续失眠。', rows: 3 },
+        { key: 'background', label: '当前困扰', placeholder: '现在发生了什么？主要压力、情绪或睡眠问题是什么？', rows: 3 },
+        { key: 'material', label: '身体感受与触发点', placeholder: '例如：胸口紧、头很胀、肩颈硬、刚和人吵完、睡前脑子停不下来。', rows: 3 },
+        { key: 'goal', label: '希望状态', placeholder: '希望结束时达到什么状态？例如：能睡、缓下来、先不崩、能继续做事。', rows: 2 },
+        { key: 'output', label: '希望产出', placeholder: '例如：安抚语言 + 3分钟呼吸练习 / 睡前安顿步骤 / 步行禅引导词', rows: 1 },
+      ] satisfies WorkbenchField[],
+    };
+  }
+
+  return {
+    title: '专家工作台',
+    intro: '把背景、目标和材料先放进来，附件可以在底部上传。',
+    button: '用工作台开始判断',
+    prompt: '请根据专家工作台信息先判断关键问题，再给建议。',
+    outputFallback: '判断结论 + 行动清单',
+    fields: [
+      { key: 'background', label: '背景', placeholder: '发生了什么？现在卡在哪里？', rows: 3 },
+      { key: 'goal', label: '目标', placeholder: '你想得到什么判断或结果？', rows: 3 },
+      { key: 'material', label: '材料要点', placeholder: '把附件里的重点、限制条件或已知事实写几句。', rows: 3 },
+      { key: 'output', label: '希望产出', placeholder: '判断结论 + 行动清单', rows: 1 },
+    ] satisfies WorkbenchField[],
+  };
 }
 
-function Segment<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: T[]; onChange: (value: T) => void }) {
+function resolveAssetUrl(url: string) {
+  if (/^https?:\/\//i.test(url) || url.startsWith('blob:')) return url;
+  return `${import.meta.env.VITE_API_BASE_URL?.replace(/\/api\/v1\/?$/, '') || ''}${url}`;
+}
+
+function MessageText({ content, dark = false }: { content: string; dark?: boolean }) {
   return (
-    <div>
-      <p className="mb-2 text-xs font-black text-stone-700">{label}</p>
-      <div className="flex flex-wrap gap-1.5 rounded-2xl bg-stone-100 p-1">
-        {options.map(option => (
-          <button
-            type="button"
-            key={option}
-            onClick={() => onChange(option)}
-            className={`rounded-xl px-2.5 py-1.5 text-xs font-semibold transition ${
-              option === value ? 'bg-white text-emerald-900 shadow-sm' : 'text-stone-500 hover:text-stone-800'
-            }`}
-          >
-            {option}
-          </button>
-        ))}
-      </div>
+    <div className={`message-rich ${dark ? 'message-rich-dark' : ''}`}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
+        components={{
+          a: ({ href, children }) => <a href={href || '#'} target="_blank" rel="noreferrer">{children}</a>,
+          img: ({ src, alt }) => <img src={resolveAssetUrl(String(src || ''))} alt={alt || ''} loading="lazy" />,
+        }}
+      >
+        {content}
+      </ReactMarkdown>
     </div>
   );
 }
 
-function Field({ field, value, onChange }: { field: FieldConfig; value: string; onChange: (value: string) => void }) {
-  if (field.type === 'select') {
-    return <Segment label={field.label} value={value || field.options?.[0] || ''} options={field.options || []} onChange={onChange} />;
-  }
-
-  const className = 'w-full rounded-xl border border-stone-200 bg-white px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-emerald-700';
+function AttachmentList({ attachments, dark = false }: { attachments?: Attachment[]; dark?: boolean }) {
+  if (!attachments?.length) return null;
   return (
-    <label className="block">
-      <span className="mb-1.5 block text-xs font-black text-stone-700">{field.label}</span>
-      {field.type === 'textarea' ? (
-        <textarea value={value} onChange={event => onChange(event.target.value)} placeholder={field.placeholder || ''} rows={3} className={`${className} py-2`} />
-      ) : (
-        <input value={value} onChange={event => onChange(event.target.value)} placeholder={field.placeholder || ''} className={`${className} h-9`} />
-      )}
-    </label>
+    <div className="mt-3 grid gap-2">
+      {attachments.map(item => {
+        const href = resolveAssetUrl(item.url);
+        const isImage = item.mimeType.startsWith('image/');
+        return (
+          <a
+            key={item.id}
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            className={`block overflow-hidden rounded-2xl border text-left ${dark ? 'border-white/20 bg-white/10' : 'border-stone-200 bg-stone-50'}`}
+          >
+            {isImage ? (
+              <img src={href} alt={item.name} className="max-h-60 w-full object-cover" />
+            ) : (
+              <div className="px-3 py-2 text-xs font-semibold">{item.name}</div>
+            )}
+          </a>
+        );
+      })}
+    </div>
   );
 }
 
@@ -307,39 +236,54 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
   const [sending, setSending] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [conversationTitle, setConversationTitle] = useState('');
+  const [conversationExpert, setConversationExpert] = useState({ conversationId, expertId });
   const [creditBlocked, setCreditBlocked] = useState(false);
-  const [replyLength, setReplyLength] = useState<ReplyLength>('正常');
-  const [askStyle, setAskStyle] = useState<AskStyle>('边问边判');
-  const [outputStyle, setOutputStyle] = useState<OutputStyle>('给行动清单');
-  const panel = useMemo(() => getPanel(expertId), [expertId]);
-  const meta = useMemo(() => getExpertDisplay(expertId), [expertId]);
-  const [formState, setFormState] = useState<{ expertId: string; values: Record<string, string> }>(() => ({
-    expertId,
-    values: { ...panel.defaults },
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+
+  const activeExpertId = conversationExpert.conversationId === conversationId ? conversationExpert.expertId : expertId;
+  const [workbenchState, setWorkbenchState] = useState(() => ({
+    expertId: activeExpertId,
+    values: getInitialWorkbench(activeExpertId),
   }));
+
+  const meta = useMemo(() => getExpertDisplay(activeExpertId), [activeExpertId]);
+  const displayExpertName = activeExpertId === expertId ? expertName : meta.alias;
+  const isMindfulness = activeExpertId === 'thich-nhat-hanh';
+  const isWangdingjun = activeExpertId === 'wangdingjun';
+  const workbenchCopy = useMemo(() => getWorkbenchCopy(activeExpertId), [activeExpertId]);
+  const workbench = workbenchState.expertId === activeExpertId ? workbenchState.values : getInitialWorkbench(activeExpertId);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const streamingRef = useRef('');
   const inputRef = useRef<HTMLInputElement>(null);
-
-  const formValues = formState.expertId === expertId ? formState.values : panel.defaults;
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setMessagesLoading(true);
-    setMessagesError(false);
-    Promise.all([
-      getMessages(token, conversationId),
-      getConversation(token, conversationId),
-    ]).then(([msgs, conv]) => {
-      setMessages(msgs);
-      setConversationTitle(conv.title);
-    }).catch(() => {
-      setMessagesError(true);
-      showToast('加载消息失败');
-    }).finally(() => {
-      setMessagesLoading(false);
-    });
+    let active = true;
+    void (async () => {
+      setMessagesLoading(true);
+      setMessagesError(false);
+      try {
+        const [msgs, conv] = await Promise.all([
+          getMessages(token, conversationId),
+          getConversation(token, conversationId),
+        ]);
+        if (!active) return;
+        setMessages(msgs);
+        setConversationTitle(conv.title);
+        if (typeof conv.expertId === 'string' && conv.expertId) {
+          setConversationExpert({ conversationId, expertId: conv.expertId });
+        }
+      } catch {
+        if (!active) return;
+        setMessagesError(true);
+        showToast('消息加载失败');
+      } finally {
+        if (active) setMessagesLoading(false);
+      }
+    })();
     return () => {
+      active = false;
       abortRef.current?.abort();
     };
   }, [conversationId, token]);
@@ -349,27 +293,86 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
   }, [messages, streamingContent]);
 
   const buildUserMessage = (text: string) => {
+    if (isWangdingjun) {
+      return [
+        text.trim(),
+        '',
+        '【作文批改与写作教学工作台】',
+        `年级：${workbench.grade || '未填写'}`,
+        `地区：${workbench.region || '未填写'}`,
+        `教材版本：${workbench.textbook || '未填写'}`,
+        `材料类型：${workbench.materialType || '未填写'}`,
+        `批改目标：${workbench.goal || '未填写'}`,
+        `学生水平：${workbench.studentLevel || '未填写'}`,
+        `期望产出：${workbench.output || workbenchCopy.outputFallback}`,
+        '',
+        '【材料内容】',
+        workbench.material || '未填写',
+        '',
+        '【边界要求】',
+        '王鼎钧只负责作文批改、写作教学、表达训练、作文讲评、日常写作作业反馈；不要定位为语文全科专家，不要冒充各省官方阅卷标准。',
+        '',
+        '【输出模板】',
+        '1. 总体判断',
+        '2. 学生优点',
+        '3. 主要问题',
+        '4. 逐项修改建议',
+        '5. 可直接给学生看的评语',
+        '6. 老师讲评要点',
+        '7. 学生下一步修改任务',
+        '8. 如选择家长反馈，追加家长可读版本',
+      ].join('\n');
+    }
+
+    if (isMindfulness) {
+      return [
+        text.trim(),
+        '',
+        `【${workbenchCopy.title}】`,
+        `咨询者姓名：${workbench.clientName || '未填写'}`,
+        `咨询者背景：${workbench.clientBackground || '未填写'}`,
+        `当前困扰：${workbench.background || '未填写'}`,
+        `希望状态：${workbench.goal || '先稳定下来'}`,
+        `身体感受与触发点：${workbench.material || '未填写'}`,
+        `希望产出：${workbench.output || workbenchCopy.outputFallback}`,
+        '',
+        '【输出要求】',
+        '请先安抚，再给一个可跟做的正念练习。不要诊断，不要说教，不要给太多道理。',
+      ].join('\n');
+    }
+
     const parts = [
       text.trim(),
       '',
-      '【本次 AI 判断设置】',
-      `回复长度：${replyLength}`,
-      `沟通方式：${askStyle}`,
-      `希望产出：${outputStyle}`,
+      '【专家工作台】',
+      `背景：${workbench.background || '未填写'}`,
+      `目标：${workbench.goal || '未填写'}`,
+      `材料要点：${workbench.material || '未填写'}`,
+      `希望产出：${workbench.output || workbenchCopy.outputFallback}`,
       '',
-      `【${panel.title}】`,
+      '【输出要求】',
+      '可以使用 Markdown 表格、图片、公式。公式请用 LaTeX：行内 $...$，独立公式 $$...$$。',
     ];
-
-    for (const field of panel.fields) {
-      const value = formValues[field.key]?.trim();
-      if (value) parts.push(`${field.label}：${value}`);
-    }
-
     return parts.join('\n');
   };
 
-  const sendText = (text: string) => {
-    if (!text.trim() || sending) return;
+  const chooseFiles = (files: FileList | null) => {
+    if (!files) return;
+    const incoming = Array.from(files);
+    if (isWangdingjun && incoming.some(file => file.type.startsWith('image/'))) {
+      showToast('图片扫描批改将在 2.0 向 SVIP 用户开放。当前可先粘贴文字或上传可读取文档。');
+    }
+    const readableFiles = isWangdingjun ? incoming.filter(file => !file.type.startsWith('image/')) : incoming;
+    const next = [...pendingFiles, ...readableFiles].slice(0, 6);
+    setPendingFiles(next);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const sendText = async (text: string) => {
+    if ((!text.trim() && pendingFiles.length === 0) || sending) return;
+    if (isWangdingjun && (!workbench.grade || !workbench.region || !workbench.textbook || !workbench.materialType)) {
+      showToast('年级、地区、教材版本、材料类型会影响批改口径，建议补充后再批改。', 'info');
+    }
 
     abortRef.current?.abort();
     setCreditBlocked(false);
@@ -378,13 +381,44 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
     setStreamingContent('');
     streamingRef.current = '';
 
+    const filesToSend = [...pendingFiles];
     const tempId = `${TEMP_ID_PREFIX}${Date.now()}`;
-    setMessages(prev => [...prev, { id: tempId, role: 'user', content: text.trim(), createdAt: new Date().toISOString() }]);
+    const tempAttachments = filesToSend.map((file, index) => ({
+      id: `${tempId}-${index}`,
+      name: file.name,
+      mimeType: file.type || 'application/octet-stream',
+      size: file.size,
+      url: URL.createObjectURL(file),
+    }));
+
+    setPendingFiles([]);
+    setMessages(prev => [
+      ...prev,
+      {
+        id: tempId,
+        role: 'user',
+        content: text.trim() || '请查看附件并给出判断。',
+        attachments: tempAttachments,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    let uploaded: Attachment[] = [];
+    try {
+      uploaded = filesToSend.length > 0 ? await uploadAttachments(token, conversationId, filesToSend) : [];
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '附件上传失败');
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      setPendingFiles(filesToSend);
+      setSending(false);
+      return;
+    }
 
     abortRef.current = sendMessageStream(
       token,
       conversationId,
       buildUserMessage(text),
+      uploaded.map(item => item.id),
       chunk => {
         streamingRef.current += chunk;
         setStreamingContent(streamingRef.current);
@@ -392,30 +426,21 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
       messageId => {
         const finalContent = streamingRef.current;
         setMessages(prev => [
-          ...prev.filter(m => !m.id.startsWith(TEMP_ID_PREFIX)),
-          { id: messageId, role: 'assistant', content: finalContent, createdAt: new Date().toISOString() },
+          ...prev.map(m => (m.id === tempId ? { ...m, id: `${Date.now()}-sent`, attachments: uploaded } : m)),
+          { id: messageId, role: 'assistant', content: finalContent, attachments: [], createdAt: new Date().toISOString() },
         ]);
         setStreamingContent('');
         setSending(false);
         inputRef.current?.focus();
       },
       err => {
-        if (err.includes('积分不足')) {
-          setCreditBlocked(true);
-        }
+        if (err.includes('积分不足') || err.includes('credits')) setCreditBlocked(true);
         showToast(err);
         setStreamingContent('');
         setSending(false);
         inputRef.current?.focus();
       },
     );
-  };
-
-  const updateField = (key: string, value: string) => {
-    setFormState(prev => {
-      const values = prev.expertId === expertId ? prev.values : panel.defaults;
-      return { expertId, values: { ...values, [key]: value } };
-    });
   };
 
   return (
@@ -429,7 +454,7 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
             首页
           </button>
           <div className="min-w-0 flex-1">
-          <h1 className="truncate text-base font-black text-emerald-950">{expertName || meta.alias}</h1>
+            <h1 className="truncate text-base font-black text-emerald-950">{displayExpertName || meta.alias}</h1>
             <p className="truncate text-xs text-stone-500">{conversationTitle || meta.title}</p>
           </div>
         </div>
@@ -451,75 +476,95 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
               <p className="mt-3 text-sm leading-6 text-stone-700">{meta.promise}</p>
             </div>
 
-            <div className="rounded-3xl border border-stone-200 bg-white/85 p-4 shadow-sm">
-                <h2 className="text-base font-black text-stone-900">{panel.title}</h2>
-              <p className="mt-1 text-xs leading-5 text-stone-500">{panel.intro}</p>
-              <div className="mt-4 space-y-4">
-                {panel.fields.map(field => (
-                  <Field key={field.key} field={field} value={formValues[field.key] || ''} onChange={next => updateField(field.key, next)} />
+            <div className={`rounded-3xl border bg-white/85 p-4 shadow-sm ${isMindfulness ? 'border-indigo-100' : 'border-stone-200'}`}>
+              <h2 className="text-base font-black text-stone-900">{workbenchCopy.title}</h2>
+              <p className="mt-1 text-xs leading-5 text-stone-500">{workbenchCopy.intro}</p>
+              {isWangdingjun && (
+                <div className="mt-3 grid gap-2 text-xs leading-5">
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-emerald-900">
+                    <p className="font-black">当前可用</p>
+                    <p>粘贴作文正文；上传 Word、PDF、文本资料；生成批改建议、讲评提纲、学生修改任务。</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => showToast('图片扫描批改将在 2.0 向 SVIP 用户开放。当前可先粘贴文字或上传可读取文档。', 'info')}
+                    className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-amber-900 transition hover:border-amber-300 hover:bg-amber-100"
+                  >
+                    <span className="block font-black">SVIP 2.0</span>
+                    <span>图片扫描批改、手写作文识别、试卷照片识别内测中</span>
+                  </button>
+                </div>
+              )}
+              <div className="mt-4 space-y-3">
+                {workbenchCopy.fields.map(field => (
+                  <label key={field.key} className="block">
+                    <span className="mb-1.5 block text-xs font-black text-stone-700">{field.label}</span>
+                    {field.options ? (
+                      <select
+                        value={workbench[field.key]}
+                        onChange={event => setWorkbenchState(prev => ({ expertId: activeExpertId, values: { ...(prev.expertId === activeExpertId ? prev.values : getInitialWorkbench(activeExpertId)), [field.key]: event.target.value } }))}
+                        className={`h-9 w-full rounded-xl border bg-white px-3 text-xs text-stone-800 outline-none ${isMindfulness ? 'border-indigo-100 focus:border-indigo-500' : 'border-stone-200 focus:border-emerald-700'}`}
+                      >
+                        <option value="">{field.placeholder}</option>
+                        {field.options.map(option => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    ) : field.rows === 1 ? (
+                      <input
+                        value={workbench[field.key]}
+                        onChange={event => setWorkbenchState(prev => ({ expertId: activeExpertId, values: { ...(prev.expertId === activeExpertId ? prev.values : getInitialWorkbench(activeExpertId)), [field.key]: event.target.value } }))}
+                        placeholder={field.placeholder}
+                        className={`h-9 w-full rounded-xl border bg-white px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 ${isMindfulness ? 'border-indigo-100 focus:border-indigo-500' : 'border-stone-200 focus:border-emerald-700'}`}
+                      />
+                    ) : (
+                      <textarea
+                        value={workbench[field.key]}
+                        onChange={event => setWorkbenchState(prev => ({ expertId: activeExpertId, values: { ...(prev.expertId === activeExpertId ? prev.values : getInitialWorkbench(activeExpertId)), [field.key]: event.target.value } }))}
+                        placeholder={field.placeholder}
+                        rows={field.rows || 3}
+                        className={`w-full rounded-xl border bg-white px-3 py-2 text-xs text-stone-800 outline-none placeholder:text-stone-400 ${isMindfulness ? 'border-indigo-100 focus:border-indigo-500' : 'border-stone-200 focus:border-emerald-700'}`}
+                      />
+                    )}
+                  </label>
                 ))}
-                <button onClick={() => sendText(`请根据我填写的【${panel.title}】先判断，还缺什么关键信息，再开始给建议。`)} disabled={sending} className="w-full rounded-2xl bg-emerald-900 px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-emerald-800 disabled:opacity-50">
-                  用这些信息开始判断
+                <button onClick={() => sendText(workbenchCopy.prompt)} disabled={sending} className={`w-full rounded-2xl px-4 py-3 text-sm font-black text-white shadow-sm transition disabled:opacity-50 ${isMindfulness ? 'bg-indigo-700 hover:bg-indigo-600' : 'bg-emerald-900 hover:bg-emerald-800'}`}>
+                  {workbenchCopy.button}
                 </button>
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-stone-200 bg-white/85 p-4 shadow-sm">
-              <h2 className="text-base font-black text-stone-900">判断设置</h2>
-              <p className="mt-1 text-xs leading-5 text-stone-500">不用懂专业词，只调整你想要的沟通方式。</p>
-              <div className="mt-4 space-y-4">
-                <Segment label="回复长度" value={replyLength} options={['短一点', '正常', '详细']} onChange={setReplyLength} />
-                <Segment label="追问节奏" value={askStyle} options={['多追问', '边问边判', '直接给建议']} onChange={setAskStyle} />
-                <Segment label="最后想要" value={outputStyle} options={['先聊清楚', '给路线表', '给行动清单']} onChange={setOutputStyle} />
               </div>
             </div>
           </aside>
 
           <section className="space-y-4">
-            {messagesLoading && (
-              <div className="flex items-center justify-center py-12 text-sm text-stone-400">
-                <svg className="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                </svg>
-                加载中...
-              </div>
-            )}
-            {messagesError && (
-              <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
-                消息加载失败，请返回重试。
-              </div>
-            )}
+            {messagesLoading && <div className="py-12 text-center text-sm text-stone-400">加载中...</div>}
+            {messagesError && <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">消息加载失败，请返回重试。</div>}
             {!messagesLoading && !messagesError && messages.length === 0 && !sending && (
-              <>
-                <div className="rounded-3xl border border-stone-200 bg-white/85 p-5 shadow-sm">
-                  <h3 className="text-lg font-black text-stone-900">你可以直接问</h3>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                    {panel.quickQuestions.map(question => (
-                      <button key={question} type="button" onClick={() => sendText(question)} className="rounded-2xl border border-stone-200 bg-stone-50 px-3 py-3 text-left text-sm font-semibold leading-5 text-stone-700 transition hover:border-emerald-700 hover:bg-white hover:text-emerald-800">
-                        {question}
-                      </button>
-                    ))}
-                  </div>
+              <div className="rounded-3xl border border-stone-200 bg-white/85 p-5 shadow-sm">
+                <h3 className="text-lg font-black text-stone-900">{isWangdingjun ? '先粘贴作文，或上传可读取资料' : isMindfulness ? '可以先做一个很小的安顿' : '可以直接问，也可以先上传材料'}</h3>
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  {(isWangdingjun ? WANGDINGJUN_QUESTIONS : isMindfulness ? MINDFULNESS_QUESTIONS : QUICK_QUESTIONS).map(question => (
+                    <button key={question} type="button" onClick={() => sendText(question)} className="rounded-2xl border border-stone-200 bg-stone-50 px-3 py-3 text-left text-sm font-semibold leading-5 text-stone-700 transition hover:border-emerald-700 hover:bg-white hover:text-emerald-800">
+                      {question}
+                    </button>
+                  ))}
                 </div>
-                <div className="rounded-3xl border border-dashed border-stone-300 bg-white/55 p-5 text-sm leading-6 text-stone-500">
-                  左侧信息填得越像真实任务，系统越能少追问、直接判断。没把握的地方可以空着，先用自己的话讲也可以。
-                </div>
-              </>
+              </div>
             )}
 
-            {messages.map(msg => (
-              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`group relative max-w-[86%] rounded-3xl px-4 py-3 text-sm leading-6 shadow-sm ${msg.role === 'user' ? 'rounded-tr-sm bg-emerald-900 text-white' : 'rounded-tl-sm border border-stone-200 bg-white text-stone-800'}`}>
-                  <MessageText content={msg.content} />
-                  {msg.role === 'assistant' && (
-                    <button onClick={() => { navigator.clipboard.writeText(msg.content); showToast('已复制', 'info'); }} className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-stone-200 bg-white text-xs opacity-0 shadow-sm transition hover:bg-stone-50 group-hover:opacity-100" title="复制">
-                      ⧉
-                    </button>
-                  )}
+            {messages.map(msg => {
+              const isUser = msg.role === 'user';
+              return (
+                <div key={msg.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`group relative max-w-[86%] rounded-3xl px-4 py-3 text-sm leading-6 shadow-sm ${isUser ? 'rounded-tr-sm bg-emerald-900 text-white' : 'rounded-tl-sm border border-stone-200 bg-white text-stone-800'}`}>
+                    <MessageText content={msg.content} dark={isUser} />
+                    <AttachmentList attachments={msg.attachments} dark={isUser} />
+                    {!isUser && (
+                      <button onClick={() => { navigator.clipboard.writeText(msg.content); showToast('已复制', 'info'); }} className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full border border-stone-200 bg-white text-xs opacity-0 shadow-sm transition hover:bg-stone-50 group-hover:opacity-100" title="复制">
+                        ⧉
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {streamingContent && (
               <div className="flex justify-start">
@@ -529,7 +574,6 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
                 </div>
               </div>
             )}
-
             <div ref={bottomRef} />
           </section>
         </div>
@@ -537,28 +581,41 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
 
       <div className="border-t border-emerald-900/10 bg-[#f7f2e8]/90 px-4 py-3 backdrop-blur">
         <div className="mx-auto max-w-5xl">
-{creditBlocked && (
+          {creditBlocked && (
             <div className="mb-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
               <p className="font-black">积分不足，暂时不能继续提问</p>
-              <p className="mt-1 text-xs leading-5 text-red-700">本次没有扣分。请返回 AI 外脑查看余额，补充积分后再继续使用。</p>
               <button type="button" onClick={onOpenCredits} className="mt-3 rounded-full bg-red-700 px-3 py-1.5 text-xs font-black text-white hover:bg-red-600">
                 去积分中心
               </button>
             </div>
           )}
+          {pendingFiles.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {pendingFiles.map((file, index) => (
+                <div key={`${file.name}-${index}`} className="flex max-w-full items-center gap-2 rounded-2xl border border-stone-200 bg-white/85 px-3 py-2 text-xs text-stone-700 shadow-sm">
+                  <span className="max-w-48 truncate font-semibold">{file.name}</span>
+                  <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="移除">x</button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="flex gap-2">
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={event => setInput(event.target.value)}
-            onKeyDown={event => event.key === 'Enter' && sendText(input)}
-            placeholder={sending ? '等 AI 追问或判断中...' : '先随便说，不清楚也没关系'}
-            className="flex-1 rounded-2xl border border-stone-300 bg-white/80 px-4 py-2.5 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-emerald-700 focus:ring-1 focus:ring-emerald-700/20"
-          />
-          <button onClick={() => sendText(input)} disabled={sending || !input.trim()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-900 text-white shadow transition hover:bg-emerald-800 disabled:opacity-40" title="发送">
-            →
-          </button>
+            <input ref={fileInputRef} type="file" multiple accept={isWangdingjun ? '.pdf,.txt,.md,.doc,.docx' : 'image/*,.pdf,.txt,.md,.doc,.docx'} onChange={event => chooseFiles(event.target.files)} className="hidden" />
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-stone-300 bg-white/80 text-stone-700 shadow-sm transition hover:border-emerald-700 hover:text-emerald-800 disabled:opacity-40" title="上传附件">
+              +
+            </button>
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={event => setInput(event.target.value)}
+              onKeyDown={event => event.key === 'Enter' && sendText(input)}
+              placeholder={sending ? '等待 AI 回复中...' : '输入问题，也可以只发附件'}
+              className="flex-1 rounded-2xl border border-stone-300 bg-white/80 px-4 py-2.5 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-emerald-700 focus:ring-1 focus:ring-emerald-700/20"
+            />
+            <button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-900 text-white shadow transition hover:bg-emerald-800 disabled:opacity-40" title="发送">
+              →
+            </button>
           </div>
         </div>
       </div>

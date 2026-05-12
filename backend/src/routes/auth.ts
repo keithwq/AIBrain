@@ -1,6 +1,7 @@
 import { Router, Request } from 'express';
 import crypto from 'crypto';
 import { prisma } from '../services/prisma';
+import { sendEmail } from '../services/email';
 
 const router = Router();
 
@@ -23,6 +24,39 @@ type WeChatUserInfo = {
   errcode?: number;
   errmsg?: string;
 };
+
+const EMAIL_CODE_TTL_MS = 5 * 60 * 1000;
+const EMAIL_CODE_RESEND_MS = 60 * 1000;
+const EMAIL_CODE_MAX_ATTEMPTS = 5;
+const PASSWORD_SECRET = process.env.LOGIN_PASSWORD_SECRET || 'aibrain-preset-password-secret-v1';
+
+function normalizeEmail(value: unknown) {
+  if (typeof value !== 'string') return null;
+  const email = value.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  return email.slice(0, 255);
+}
+
+function normalizeNickname(value: unknown) {
+  if (typeof value !== 'string') return null;
+  const nickname = value.trim().slice(0, 50);
+  return nickname || null;
+}
+
+function hashEmailCode(email: string, code: string) {
+  const secret = process.env.EMAIL_CODE_SECRET || process.env.WECHAT_STATE_SECRET || 'aibrain-dev-email-secret';
+  return crypto.createHmac('sha256', secret).update(`${email}:${code}`).digest('hex');
+}
+
+function createEmailCode() {
+  return crypto.randomInt(100000, 1000000).toString();
+}
+
+function maskEmail(email: string) {
+  const [name, domain] = email.split('@');
+  const visible = name.length <= 2 ? name[0] : `${name[0]}***${name[name.length - 1]}`;
+  return `${visible}@${domain}`;
+}
 
 function getPublicOrigin(req: Request) {
   return process.env.PUBLIC_ORIGIN || `${req.protocol}://${req.get('host')}`;
@@ -72,6 +106,10 @@ function verifyState(state: unknown) {
   }
 }
 
+function hashPassword(password: string) {
+  return crypto.createHmac('sha256', PASSWORD_SECRET).update(password).digest('hex');
+}
+
 async function uniqueNickname(base: string) {
   const cleaned = base.trim().slice(0, 40) || 'WeChat User';
   for (let i = 0; i < 20; i += 1) {
@@ -82,23 +120,140 @@ async function uniqueNickname(base: string) {
   return `WeChat User ${crypto.randomBytes(4).toString('hex')}`;
 }
 
+async function uniqueEmailNickname(email: string) {
+  const prefix = email.split('@')[0].replace(/[^a-z0-9_-]/gi, '').slice(0, 24) || 'user';
+  return uniqueNickname(prefix);
+}
+
 router.post('/quick-login', async (req, res) => {
-  if (process.env.ALLOW_NICKNAME_LOGIN === 'false') {
+  if (process.env.ALLOW_NICKNAME_LOGIN !== 'true') {
     return res.status(403).json({ error: 'nickname login disabled' });
   }
 
-  const { nickname } = req.body;
-  if (!nickname || typeof nickname !== 'string') {
+  const nickname = normalizeNickname(req.body?.nickname);
+  if (!nickname) {
     return res.status(400).json({ error: 'nickname is required' });
   }
-  const trimmed = nickname.trim().slice(0, 50);
-  if (!trimmed) {
-    return res.status(400).json({ error: 'nickname cannot be empty' });
-  }
-  let user = await prisma.user.findUnique({ where: { nickname: trimmed } });
+
+  let user = await prisma.user.findUnique({ where: { nickname } });
   if (!user) {
-    user = await prisma.user.create({ data: { nickname: trimmed } });
+    user = await prisma.user.create({ data: { nickname } });
   }
+  res.json({ user_id: user.id, nickname: user.nickname, credits: user.credits, token: user.token });
+});
+
+router.post('/password-login', async (req, res) => {
+  const nickname = normalizeNickname(req.body?.nickname ?? req.body?.username);
+  const password = typeof req.body?.password === 'string' ? req.body.password.trim() : '';
+  if (!nickname || !password) {
+    return res.status(400).json({ error: 'nickname and password are required' });
+  }
+
+  const user = await prisma.user.findUnique({ where: { nickname } });
+  if (!user || !user.passwordHash) {
+    return res.status(400).json({ error: 'invalid username or password' });
+  }
+
+  if (!crypto.timingSafeEqual(Buffer.from(hashPassword(password)), Buffer.from(user.passwordHash))) {
+    return res.status(400).json({ error: 'invalid username or password' });
+  }
+
+  res.json({ user_id: user.id, nickname: user.nickname, credits: user.credits, token: user.token });
+});
+
+router.post('/email/send-code', async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  if (!email) {
+    return res.status(400).json({ error: 'valid email is required' });
+  }
+
+  const recent = await prisma.emailLoginCode.findFirst({
+    where: {
+      email,
+      createdAt: { gt: new Date(Date.now() - EMAIL_CODE_RESEND_MS) },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+  if (recent) {
+    return res.status(429).json({ error: 'please wait before requesting another code' });
+  }
+
+  const code = createEmailCode();
+  await prisma.emailLoginCode.create({
+    data: {
+      email,
+      codeHash: hashEmailCode(email, code),
+      expiresAt: new Date(Date.now() + EMAIL_CODE_TTL_MS),
+      userAgent: req.get('user-agent')?.slice(0, 300),
+      ipAddress: req.ip?.slice(0, 80),
+    },
+  });
+
+  const result = await sendEmail({
+    to: email,
+    subject: 'AI外脑登录验证码',
+    text: [
+      `你的 AI外脑 登录验证码是：${code}`,
+      '',
+      '验证码 5 分钟内有效。若非本人操作，请忽略此邮件。',
+    ].join('\n'),
+  });
+
+  res.json({
+    ok: true,
+    email: maskEmail(email),
+    dev_mode: result.devMode,
+  });
+});
+
+router.post('/email/login', async (req, res) => {
+  const email = normalizeEmail(req.body?.email);
+  const code = typeof req.body?.code === 'string' ? req.body.code.trim() : '';
+  if (!email || !/^\d{6}$/.test(code)) {
+    return res.status(400).json({ error: 'valid email and code are required' });
+  }
+
+  const record = await prisma.emailLoginCode.findFirst({
+    where: {
+      email,
+      usedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  if (!record) {
+    return res.status(400).json({ error: 'code is invalid or expired' });
+  }
+  if (record.attempts >= EMAIL_CODE_MAX_ATTEMPTS) {
+    return res.status(400).json({ error: 'code attempt limit exceeded' });
+  }
+
+  const nextAttempts = record.attempts + 1;
+  const codeHash = hashEmailCode(email, code);
+  if (!crypto.timingSafeEqual(Buffer.from(codeHash), Buffer.from(record.codeHash))) {
+    await prisma.emailLoginCode.update({
+      where: { id: record.id },
+      data: { attempts: nextAttempts },
+    });
+    return res.status(400).json({ error: 'code is invalid or expired' });
+  }
+
+  let user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        email,
+        nickname: await uniqueEmailNickname(email),
+      },
+    });
+  }
+
+  await prisma.emailLoginCode.update({
+    where: { id: record.id },
+    data: { usedAt: new Date(), attempts: nextAttempts },
+  });
+
   res.json({ user_id: user.id, nickname: user.nickname, credits: user.credits, token: user.token });
 });
 

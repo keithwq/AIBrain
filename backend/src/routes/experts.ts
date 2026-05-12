@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { loadPersonaSkill } from '../services/personas';
+import { countPersonaSkillLines, loadPersonaSkill, MIN_READY_SKILL_LINES } from '../services/personas';
 
 const router = Router();
 
@@ -136,6 +136,26 @@ const experts: Expert[] = [
     status: 'ready',
   },
   {
+    id: 'li-meijin',
+    name: '李玫瑾',
+    alias: '李玫瑾',
+    avatar: '/experts/li-meijin.svg',
+    description: '家庭教育与犯罪心理判断外脑，围绕心理抚养、早年养育和未成年成长边界给出判断。',
+    tagline: '心理抚养、成长边界和家庭教育判断',
+    expertise: ['心理抚养', '家庭教育', '青少年成长', '犯罪预防'],
+    status: 'ready',
+  },
+  {
+    id: 'thich-nhat-hanh',
+    name: '一行禅师',
+    alias: '一行禅师',
+    avatar: '/experts/thich-nhat-hanh.svg',
+    description: '正念与情绪舒缓外脑，帮助用户把压力、焦虑和混乱先安顿回呼吸和当下。',
+    tagline: '正念练习、呼吸安顿和情绪回到当下',
+    expertise: ['正念呼吸', '情绪安顿', '步行禅', '压力舒缓'],
+    status: 'ready',
+  },
+  {
     id: 'zhanqimin',
     name: '肠博士',
     alias: '肠博士',
@@ -151,9 +171,23 @@ const experts: Expert[] = [
 const skillCache = new Map<string, string | null>(
   experts.map(e => [e.id, loadPersonaSkill(e.id)])
 );
+const skillLineCache = new Map<string, number>(
+  experts.map(e => [e.id, countPersonaSkillLines(e.id)])
+);
+
+function serializeExpert(expert: Expert) {
+  const skillLines = skillLineCache.get(expert.id) ?? 0;
+  return {
+    ...expert,
+    status: skillLines >= MIN_READY_SKILL_LINES ? 'ready' : 'pending',
+    has_skill: skillCache.get(expert.id) !== null,
+    skill_lines: skillLines,
+    min_ready_skill_lines: MIN_READY_SKILL_LINES,
+  };
+}
 
 router.get('/', (_req, res) => {
-  res.json(experts.map(expert => ({ ...expert, has_skill: skillCache.get(expert.id) !== null })));
+  res.json(experts.map(serializeExpert).filter(expert => expert.status === 'ready'));
 });
 
 router.get('/:id', (req, res) => {
@@ -161,8 +195,12 @@ router.get('/:id', (req, res) => {
   if (!expert) {
     return res.status(404).json({ error: 'expert not found' });
   }
+  const serialized = serializeExpert(expert);
+  if (serialized.status !== 'ready') {
+    return res.status(404).json({ error: 'expert not available' });
+  }
 
-  res.json({ ...expert, skill: skillCache.get(expert.id) ?? null });
+  res.json({ ...serialized, skill: skillCache.get(expert.id) ?? null });
 });
 
 export default router;

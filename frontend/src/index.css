@@ -34,3 +34,61 @@ body {
   opacity: 1;
   transform: none;
 }
+
+.message-rich {
+  overflow-wrap: anywhere;
+}
+
+.message-rich p,
+.message-rich ul,
+.message-rich ol,
+.message-rich blockquote,
+.message-rich pre,
+.message-rich table {
+  margin: 0.5rem 0;
+}
+
+.message-rich p:first-child {
+  margin-top: 0;
+}
+
+.message-rich p:last-child {
+  margin-bottom: 0;
+}
+
+.message-rich a {
+  color: #047857;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.message-rich-dark a {
+  color: #d1fae5;
+}
+
+.message-rich img {
+  max-height: 360px;
+  max-width: 100%;
+  border-radius: 16px;
+  border: 1px solid rgba(120, 113, 108, 0.25);
+  object-fit: contain;
+}
+
+.message-rich code {
+  border-radius: 8px;
+  background: rgba(120, 113, 108, 0.12);
+  padding: 0.1rem 0.35rem;
+}
+
+.message-rich pre {
+  overflow-x: auto;
+  border-radius: 14px;
+  background: #1c1917;
+  padding: 0.75rem;
+  color: #fafaf9;
+}
+
+.message-rich pre code {
+  background: transparent;
+  padding: 0;
+}

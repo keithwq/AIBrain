@@ -2,10 +2,12 @@ import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
+import path from 'path';
 import authRoutes from './routes/auth';
 import expertsRoutes from './routes/experts';
 import chatRoutes from './routes/chat';
 import usersRoutes from './routes/users';
+import { ensurePresetUsers } from './services/bootstrap';
 
 dotenv.config();
 
@@ -35,11 +37,14 @@ app.use(cors({
 }));
 
 app.use(express.json());
+app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
 
-// IP-based rate limit on auth to prevent unlimited account creation
+const authRateLimitMax = Number(process.env.AUTH_RATE_LIMIT_MAX || 100);
+
+// IP-based rate limit on auth to prevent unlimited account creation and brute-force login attempts.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: Number.isFinite(authRateLimitMax) && authRateLimitMax > 0 ? authRateLimitMax : 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: '请求过于频繁，请稍后再试' },
@@ -60,8 +65,17 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: '服务器内部错误' });
 });
 
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+async function main() {
+  await ensurePresetUsers();
+
+  app.listen(port, () => {
+    console.log(`Server running on http://localhost:${port}`);
+  });
+}
+
+main().catch(err => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });
 
 process.on('unhandledRejection', reason => {

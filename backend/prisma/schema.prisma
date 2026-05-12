@@ -11,6 +11,8 @@ model User {
   id        String   @id @default(uuid())
   nickname  String   @unique @db.VarChar(50)
   token     String   @unique @default(uuid()) @db.VarChar(36)
+  passwordHash String? @map("password_hash") @db.VarChar(255)
+  email     String?  @unique @db.VarChar(255)
   wechatOpenId  String?  @unique @map("wechat_openid") @db.VarChar(100)
   wechatUnionId String?  @unique @map("wechat_unionid") @db.VarChar(100)
   wechatAvatar  String?  @map("wechat_avatar") @db.VarChar(500)
@@ -20,8 +22,25 @@ model User {
 
   conversations Conversation[]
   usageLogs     UsageLog[]
+  attachments    Attachment[]
 
   @@map("users")
+}
+
+model EmailLoginCode {
+  id          String    @id @default(uuid())
+  email       String    @db.VarChar(255)
+  codeHash    String    @map("code_hash") @db.VarChar(64)
+  expiresAt   DateTime  @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  attempts    Int       @default(0)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  userAgent   String?   @map("user_agent") @db.VarChar(300)
+  ipAddress   String?   @map("ip_address") @db.VarChar(80)
+
+  @@index([email, createdAt])
+  @@index([email, expiresAt])
+  @@map("email_login_codes")
 }
 
 model Conversation {
@@ -33,6 +52,7 @@ model Conversation {
 
   user     User     @relation(fields: [userId], references: [id])
   messages Message[]
+  attachments Attachment[]
 
   @@map("conversations")
 }
@@ -45,8 +65,30 @@ model Message {
   createdAt      DateTime @default(now()) @map("created_at")
 
   conversation Conversation @relation(fields: [conversationId], references: [id])
+  attachments  Attachment[]
 
   @@map("messages")
+}
+
+model Attachment {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  conversationId String   @map("conversation_id")
+  messageId      String?  @map("message_id")
+  filename       String   @db.VarChar(255)
+  originalName   String   @map("original_name") @db.VarChar(255)
+  mimeType       String   @map("mime_type") @db.VarChar(120)
+  size           Int
+  url            String   @db.VarChar(500)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user         User         @relation(fields: [userId], references: [id])
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  message      Message?     @relation(fields: [messageId], references: [id])
+
+  @@index([conversationId])
+  @@index([messageId])
+  @@map("attachments")
 }
 
 model UsageLog {

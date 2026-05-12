@@ -68,18 +68,24 @@ function App() {
 
     const params = new URLSearchParams(window.location.search);
     const rawWechatLogin = params.get('wechat_login');
+    let loginTimer: number | undefined;
     if (rawWechatLogin) {
       const loginParams = new URLSearchParams(rawWechatLogin);
       const uid = loginParams.get('user_id');
       const nick = loginParams.get('nickname');
       const tok = loginParams.get('token');
       if (uid && nick && tok) {
-        handleLogin(uid, nick, tok);
-        window.history.replaceState(null, '', window.location.pathname);
+        loginTimer = window.setTimeout(() => {
+          handleLogin(uid, nick, tok);
+          window.history.replaceState(null, '', window.location.pathname);
+        }, 0);
       }
     }
 
-    return () => window.removeEventListener('message', handleWechatMessage);
+    return () => {
+      window.removeEventListener('message', handleWechatMessage);
+      if (loginTimer) window.clearTimeout(loginTimer);
+    };
   }, []);
 
   const handleOpenHome = useCallback(() => {

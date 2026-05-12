@@ -13,6 +13,12 @@ export const EXPERT_CATEGORIES: ExpertCategory[] = [
     expertIds: ['wangdingjun', 'zhangxuefeng'],
   },
   {
+    id: 'family',
+    name: '家庭教育',
+    description: '心理抚养 / 亲子 / 成长边界',
+    expertIds: ['li-meijin'],
+  },
+  {
     id: 'business',
     name: '商业增长',
     description: '战略 / 营销 / 组织',
@@ -35,6 +41,12 @@ export const EXPERT_CATEGORIES: ExpertCategory[] = [
     name: '健康医疗',
     description: '肠道 / 磁医学 / 医学沟通',
     expertIds: ['xuehuashi', 'zhanqimin'],
+  },
+  {
+    id: 'mindfulness',
+    name: '正念支持',
+    description: '呼吸 / 情绪安顿 / 当下觉察',
+    expertIds: ['thich-nhat-hanh'],
   },
   {
     id: 'structure',

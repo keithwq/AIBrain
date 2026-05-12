@@ -32,6 +32,8 @@ services:
       WECHAT_REDIRECT_URI: "${WECHAT_REDIRECT_URI}"
       WECHAT_STATE_SECRET: "${WECHAT_STATE_SECRET}"
       ALLOW_NICKNAME_LOGIN: "${ALLOW_NICKNAME_LOGIN:-true}"
+      ALLOW_PRESET_TEST_USERS: "${ALLOW_PRESET_TEST_USERS:-true}"
+      LOGIN_PASSWORD_SECRET: "${LOGIN_PASSWORD_SECRET:-}"
       PERSONA_BASE_PATH: "/app/personas"
       PORT: "3001"
     depends_on:
@@ -45,7 +47,7 @@ services:
       args:
         VITE_API_BASE_URL: /api/v1
     ports:
-      - "80:5173"
+      - "80:80"
     depends_on:
       - backend
 
