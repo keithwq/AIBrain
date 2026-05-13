@@ -10,7 +10,7 @@ export const EXPERT_CATEGORIES: ExpertCategory[] = [
     id: 'education',
     name: '教培机构',
     description: '语文 / 升学 / 教研 / 校区',
-    expertIds: ['wangdingjun', 'zhangxuefeng'],
+    expertIds: ['wangdingjun', 'wangrongsheng', 'sunshaozhen', 'yejiaying', 'zhangxuefeng'],
   },
   {
     id: 'family',
@@ -32,9 +32,9 @@ export const EXPERT_CATEGORIES: ExpertCategory[] = [
   },
   {
     id: 'legal',
-    name: '法律风控',
-    description: '合同 / 证据 / 合规',
-    expertIds: ['luoxiang'],
+    name: '法律避坑',
+    description: '合同 / 证据 / 别踩坑',
+    expertIds: ['kuangtuzhangsan'],
   },
   {
     id: 'health',
@@ -46,7 +46,7 @@ export const EXPERT_CATEGORIES: ExpertCategory[] = [
     id: 'mindfulness',
     name: '正念支持',
     description: '呼吸 / 情绪安顿 / 当下觉察',
-    expertIds: ['thich-nhat-hanh'],
+    expertIds: ['yixingchanshi'],
   },
   {
     id: 'structure',

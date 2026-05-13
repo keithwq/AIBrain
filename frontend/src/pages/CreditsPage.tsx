@@ -27,7 +27,7 @@ const SUPPLIES = [
   {
     title: '深度调用包',
     amount: 10,
-    description: '适合连续使用多张方法卡，方便测试完整流程。',
+    description: '适合连续使用多个智脑，方便测试完整流程。',
   },
 ];
 

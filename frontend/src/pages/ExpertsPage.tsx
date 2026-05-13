@@ -73,23 +73,23 @@ const ORDER_INDEX = new Map<string, number>(FEATURED_EXPERT_ORDER.map((id, index
 const CATEGORY_VISUALS: Record<string, { icon: string; tone: string; active: string; mark: string; action: string }> = {
   education: {
     icon: '教',
-    tone: 'border-sky-100 bg-sky-50 text-sky-900',
-    active: 'border-sky-400 bg-sky-100 shadow-[0_18px_50px_rgba(14,165,233,0.18)]',
-    mark: 'bg-sky-500',
+    tone: 'border-[#eadfce] bg-[#fffaf2] text-stone-950',
+    active: 'border-[#d8c5aa] bg-[#f8f4ed] shadow-[0_18px_50px_rgba(80,64,42,0.12)]',
+    mark: 'bg-[#2f251d]',
     action: '做课程、教研、升学判断',
   },
   family: {
     icon: '家',
-    tone: 'border-rose-100 bg-rose-50 text-rose-950',
-    active: 'border-rose-400 bg-rose-100 shadow-[0_18px_50px_rgba(244,63,94,0.18)]',
-    mark: 'bg-rose-500',
+    tone: 'border-[#eadfce] bg-[#fffaf2] text-stone-950',
+    active: 'border-[#d8c5aa] bg-[#f8f4ed] shadow-[0_18px_50px_rgba(80,64,42,0.12)]',
+    mark: 'bg-[#2f251d]',
     action: '看家庭教育、成长边界、心理抚养',
   },
   business: {
     icon: '商',
-    tone: 'border-amber-100 bg-amber-50 text-amber-950',
-    active: 'border-amber-400 bg-amber-100 shadow-[0_18px_50px_rgba(245,158,11,0.2)]',
-    mark: 'bg-amber-500',
+    tone: 'border-[#eadfce] bg-[#fffaf2] text-stone-950',
+    active: 'border-[#d8c5aa] bg-[#f8f4ed] shadow-[0_18px_50px_rgba(80,64,42,0.12)]',
+    mark: 'bg-[#2f251d]',
     action: '做战略、营销、组织增长',
   },
   product: {
@@ -101,23 +101,23 @@ const CATEGORY_VISUALS: Record<string, { icon: string; tone: string; active: str
   },
   legal: {
     icon: '法',
-    tone: 'border-blue-100 bg-blue-50 text-blue-950',
-    active: 'border-blue-400 bg-blue-100 shadow-[0_18px_50px_rgba(37,99,235,0.18)]',
-    mark: 'bg-blue-600',
-    action: '看合同、证据、风险边界',
+    tone: 'border-[#eadfce] bg-[#fffaf2] text-stone-950',
+    active: 'border-[#d8c5aa] bg-[#f8f4ed] shadow-[0_18px_50px_rgba(80,64,42,0.12)]',
+    mark: 'bg-[#2f251d]',
+    action: '先别踩坑、补证据、稳妥处理',
   },
   health: {
     icon: '医',
-    tone: 'border-emerald-100 bg-emerald-50 text-emerald-950',
-    active: 'border-emerald-400 bg-emerald-100 shadow-[0_18px_50px_rgba(16,185,129,0.18)]',
-    mark: 'bg-emerald-500',
+    tone: 'border-[#eadfce] bg-[#fffaf2] text-stone-950',
+    active: 'border-[#d8c5aa] bg-[#f8f4ed] shadow-[0_18px_50px_rgba(80,64,42,0.12)]',
+    mark: 'bg-[#2f251d]',
     action: '做症状梳理和医学沟通',
   },
   mindfulness: {
     icon: '静',
-    tone: 'border-indigo-100 bg-indigo-50 text-indigo-950',
-    active: 'border-indigo-400 bg-indigo-100 shadow-[0_18px_50px_rgba(99,102,241,0.18)]',
-    mark: 'bg-indigo-500',
+    tone: 'border-[#eadfce] bg-[#fffaf2] text-stone-950',
+    active: 'border-[#d8c5aa] bg-[#f8f4ed] shadow-[0_18px_50px_rgba(80,64,42,0.12)]',
+    mark: 'bg-[#2f251d]',
     action: '做呼吸练习和情绪安顿',
   },
   structure: {
@@ -129,9 +129,9 @@ const CATEGORY_VISUALS: Record<string, { icon: string; tone: string; active: str
   },
   knowledge: {
     icon: '知',
-    tone: 'border-teal-100 bg-teal-50 text-teal-950',
-    active: 'border-teal-400 bg-teal-100 shadow-[0_18px_50px_rgba(20,184,166,0.18)]',
-    mark: 'bg-teal-500',
+    tone: 'border-[#eadfce] bg-[#fffaf2] text-stone-950',
+    active: 'border-[#d8c5aa] bg-[#f8f4ed] shadow-[0_18px_50px_rgba(80,64,42,0.12)]',
+    mark: 'bg-[#2f251d]',
     action: '拆知识、做表达训练',
   },
 };
@@ -154,8 +154,8 @@ export default function ExpertsPage({ userId, token, nickname, onSelectExpert, o
       setExperts(items);
       setError(null);
     }).catch(() => {
-      setError('加载方法卡失败');
-      showToast('加载方法卡失败');
+      setError('加载智脑失败');
+      showToast('加载智脑失败');
     });
     getCredits(token).then((data: { credits: number }) => setCredits(data.credits)).catch(() => {});
     getConversations(token).then(items => {
@@ -228,7 +228,7 @@ export default function ExpertsPage({ userId, token, nickname, onSelectExpert, o
         {credits !== null && (
           <div className="flex items-center justify-between rounded-2xl border border-black/5 bg-white px-5 py-3 shadow-sm">
             <span className="text-sm text-[var(--ink-2)]">剩余积分</span>
-            <button onClick={onOpenCredits} className={`text-lg font-black transition hover:opacity-70 ${credits === 0 ? 'text-red-500' : 'text-blue-600'}`}>
+            <button onClick={onOpenCredits} className={`text-lg font-black transition hover:opacity-70 ${credits === 0 ? 'text-red-500' : 'text-[#8a5a35]'}`}>
               {credits} 分 →
             </button>
           </div>
@@ -237,21 +237,21 @@ export default function ExpertsPage({ userId, token, nickname, onSelectExpert, o
         {isCreditsExhausted && (
           <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
             <p className="font-black">积分已用完，暂时不能开启新对话</p>
-            <p className="mt-1 text-xs leading-5 text-red-700">历史记录仍可查看。补充积分后，方法卡会自动恢复可点击。</p>
+            <p className="mt-1 text-xs leading-5 text-red-700">历史记录仍可查看。补充积分后，智脑会自动恢复可点击。</p>
           </div>
         )}
 
         <section className="overflow-hidden rounded-[28px] border border-black/5 bg-white shadow-sm">
           <div className="grid gap-0 lg:grid-cols-[0.85fr_1.15fr]">
-            <div className="bg-[#0b1220] p-6 text-white md:p-8">
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-blue-300">领域入口</p>
+            <div className="bg-[#16130f] p-6 text-white md:p-8">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-[#d7b98d]">领域入口</p>
               <h2 className="mt-4 text-3xl font-black leading-tight md:text-4xl">
                 先选问题场景，
                 <br />
-                再调用专家方法卡。
+                再调用智脑。
               </h2>
               <p className="mt-5 max-w-sm text-sm leading-7 text-white/62">
-                领域入口不是内容分类，而是帮你把问题先放进正确的判断框架里。点一个领域，下方会只保留对应专家。
+                领域入口不是内容分类，而是帮你把问题先放进正确的判断框架里。点一个领域，下方会只保留对应智脑。
               </p>
               <div className="mt-8 grid grid-cols-3 gap-3">
                 <div className="border-t border-white/15 pt-4">
@@ -260,7 +260,7 @@ export default function ExpertsPage({ userId, token, nickname, onSelectExpert, o
                 </div>
                 <div className="border-t border-white/15 pt-4">
                   <p className="text-2xl font-black">{sortedExperts?.length ?? '-'}</p>
-                  <p className="mt-1 text-xs text-white/50">张方法卡</p>
+                  <p className="mt-1 text-xs text-white/50">个智脑</p>
                 </div>
                 <div className="border-t border-white/15 pt-4">
                   <p className="text-2xl font-black">{credits ?? '-'}</p>
@@ -285,7 +285,7 @@ export default function ExpertsPage({ userId, token, nickname, onSelectExpert, o
                           {visual.icon}
                         </span>
                         <span className={`rounded-full px-2.5 py-1 text-xs font-black ${active ? 'bg-white text-gray-950' : 'bg-white/70 text-gray-600'}`}>
-                          {active ? '已选中' : `${group.experts.length} 张卡`}
+                          {active ? '已选中' : `${group.experts.length} 个智脑`}
                         </span>
                       </div>
                       <p className="mt-4 text-lg font-black">{group.name}</p>
@@ -302,17 +302,17 @@ export default function ExpertsPage({ userId, token, nickname, onSelectExpert, o
         <section ref={expertsSectionRef}>
           <div className="mb-4 flex flex-col justify-between gap-4 rounded-[24px] border border-black/5 bg-white px-5 py-4 shadow-sm md:flex-row md:items-center">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.14em] text-blue-600">当前筛选</p>
-              <h2 className="mt-1 text-2xl font-black text-gray-950">{selectedCategory ? selectedCategory.name : '全部方法卡'}</h2>
+              <p className="text-xs font-black uppercase tracking-[0.14em] text-[#8a5a35]">当前筛选</p>
+              <h2 className="mt-1 text-2xl font-black text-gray-950">{selectedCategory ? selectedCategory.name : '全部智脑'}</h2>
               <p className="mt-1 text-sm leading-6 text-gray-500">
-                {selectedCategory ? selectedCategory.description : '所有已上线专家方法卡。也可以先从上方领域入口筛选。'}
+                {selectedCategory ? selectedCategory.description : '所有已上线智脑。也可以先从上方领域入口筛选。'}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 onClick={() => setSelectedCategoryId(null)}
-                className={`rounded-full border px-4 py-2 text-sm font-black transition ${!selectedCategory ? 'border-gray-950 bg-gray-950 text-white' : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:text-blue-600'}`}
+                className={`rounded-full border px-4 py-2 text-sm font-black transition ${!selectedCategory ? 'border-[#2f251d] bg-[#2f251d] text-white' : 'border-[#eadfce] bg-white text-stone-700 hover:border-[#d8c5aa] hover:text-[#8a5a35]'}`}
               >
                 全部
               </button>
@@ -320,7 +320,7 @@ export default function ExpertsPage({ userId, token, nickname, onSelectExpert, o
                 <button
                   type="button"
                   onClick={() => setSelectedCategoryId(null)}
-                  className="rounded-full border border-gray-200 bg-white px-4 py-2 text-sm font-black text-gray-700 hover:border-blue-300 hover:text-blue-600"
+                  className="rounded-full border border-[#eadfce] bg-white px-4 py-2 text-sm font-black text-stone-700 hover:border-[#d8c5aa] hover:text-[#8a5a35]"
                 >
                   清除筛选
                 </button>
@@ -345,7 +345,7 @@ export default function ExpertsPage({ userId, token, nickname, onSelectExpert, o
                       ? 'border-black/5 bg-white'
                       : isCreditsExhausted
                         ? 'cursor-not-allowed border-black/5 bg-white opacity-60'
-                        : 'border-black/5 bg-white hover:-translate-y-1 hover:border-blue-200 hover:shadow-lg'
+                        : 'border-black/5 bg-white hover:-translate-y-1 hover:border-[#d8c5aa] hover:shadow-lg'
                   }`}
                 >
                   {!expert ? (
@@ -358,12 +358,12 @@ export default function ExpertsPage({ userId, token, nickname, onSelectExpert, o
                   ) : (
                     <>
                       {category && (
-                        <span className="mb-2 inline-block rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                          <span className="mb-2 inline-block rounded-full bg-[#f3eadc] px-2 py-0.5 text-xs font-semibold text-[#7a4c2c]">
                           {category.name}
                         </span>
                       )}
                       <div className="flex items-center gap-3">
-                        <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-blue-50">
+                        <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-[#f3eadc]">
                           {avatar && <img src={avatar} alt={display?.alias || expert.alias} className="h-full w-full object-cover" />}
                         </div>
                         <div className="min-w-0">
@@ -384,9 +384,9 @@ export default function ExpertsPage({ userId, token, nickname, onSelectExpert, o
             })}
           </div>
           {displayedExperts && displayedExperts.length === 0 && (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-6 text-sm leading-6 text-amber-900">
-              <p className="font-black">当前没有达到 5000 行蒸馏标准的专家，已全部下架。</p>
-              <p className="mt-1">历史对话仍可查看；新专家会在 persona 补足并通过标准后自动重新上架。</p>
+            <div className="rounded-2xl border border-[#eadfce] bg-[#fffaf2] px-5 py-6 text-sm leading-6 text-[#7a4c2c]">
+              <p className="font-black">当前没有达到上架标准的智脑，已全部下架。</p>
+              <p className="mt-1">历史对话仍可查看；新智脑会在资料补足并通过标准后自动重新上架。</p>
             </div>
           )}
         </section>
@@ -400,7 +400,7 @@ export default function ExpertsPage({ userId, token, nickname, onSelectExpert, o
                 placeholder="搜索记录..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="rounded-full border border-gray-200 bg-white px-4 py-2 text-sm outline-none focus:border-blue-400"
+                className="rounded-full border border-[#eadfce] bg-white px-4 py-2 text-sm outline-none focus:border-[#8a5a35]"
               />
             </div>
             {conversationsError ? (
@@ -432,7 +432,7 @@ export default function ExpertsPage({ userId, token, nickname, onSelectExpert, o
                               if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                               if (e.key === 'Escape') { setEditingId(null); }
                             }}
-                            className="w-full rounded border border-blue-300 px-2 py-0.5 text-sm outline-none"
+                            className="w-full rounded border border-[#d8c5aa] px-2 py-0.5 text-sm outline-none"
                           />
                         ) : (
                           <button
@@ -445,7 +445,7 @@ export default function ExpertsPage({ userId, token, nickname, onSelectExpert, o
                           >
                             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                               <span className="truncate text-sm font-semibold text-gray-950">{label}</span>
-                              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">{display.alias}</span>
+                              <span className="rounded-full bg-[#f3eadc] px-2 py-0.5 text-[11px] font-semibold text-[#7a4c2c]">{display.alias}</span>
                               <span className="text-[11px] text-gray-400">{new Date(conv.createdAt).toLocaleDateString()}</span>
                             </div>
                             <p className="mt-1 text-xs text-gray-400">双击可改标题</p>
