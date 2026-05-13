@@ -77,6 +77,20 @@ const WANGDINGJUN_QUESTIONS = [
   '请诊断我上传的资料，并给一版可用改稿。',
 ];
 
+const WANGRONGSHENG_QUESTIONS = [
+  '请把这节课整理成一份能上课的教案。',
+  '请帮我生成说课稿，重点说明教学内容选择的理据。',
+  '请把这份备课材料改成课堂逐字稿。',
+  '请检查我的教案目标、内容、活动、评价是否一致。',
+];
+
+const YEJIAYING_QUESTIONS = [
+  '请带我讲读这首诗，先从诵读和声情入手。',
+  '请把这首词整理成一节可上课的主问题链。',
+  '请说明这组诗词的意象脉络和兴发感动。',
+  '请给这首诗词的典故查检方向，不要泛泛堆知识。',
+];
+
 type TeacherBoardId = 'correction' | 'preparation';
 type TeacherWorkflowId =
   | 'essay-correction'
@@ -203,6 +217,319 @@ const TEACHER_WORKFLOWS: Record<TeacherWorkflowId, {
   },
 };
 
+type RongshengBoardId = 'reading' | 'lesson-type' | 'diagnosis';
+type RongshengWorkflowId =
+  | 'content-decision'
+  | 'lesson-skeleton'
+  | 'unit-alignment'
+  | 'lesson-plan'
+  | 'speaking-script'
+  | 'teaching-transcript'
+  | 'writing-content'
+  | 'lesson-diagnosis'
+  | 'activity-alignment';
+
+const RONGSHENG_BOARDS: Array<{ id: RongshengBoardId; label: string; hint: string }> = [
+  { id: 'reading', label: '备课成品', hint: '教案、说课稿、逐字稿先定教学内容' },
+  { id: 'lesson-type', label: '内容理据', hint: '判断这一课该教什么、不该教什么' },
+  { id: 'diagnosis', label: '诊断改稿', hint: '检查目标、内容、活动、评价是否一致' },
+];
+
+const RONGSHENG_WORKFLOWS_BY_BOARD: Record<RongshengBoardId, RongshengWorkflowId[]> = {
+  reading: ['lesson-plan', 'speaking-script', 'teaching-transcript'],
+  'lesson-type': ['content-decision', 'lesson-skeleton', 'unit-alignment', 'writing-content'],
+  diagnosis: ['lesson-diagnosis', 'activity-alignment'],
+};
+
+const RONGSHENG_WORKFLOWS: Record<RongshengWorkflowId, {
+  board: RongshengBoardId;
+  label: string;
+  title: string;
+  intro: string;
+  button: string;
+  materialLabel: string;
+  materialPlaceholder: string;
+  directionLabel: string;
+  directionPlaceholder: string;
+  outputLabel: string;
+  outputPlaceholder: string;
+  prompt: string;
+  outputStructure: string[];
+}> = {
+  'lesson-plan': {
+    board: 'reading',
+    label: '教案',
+    title: '生成一份能上课的语文教案',
+    intro: '先确定本课教学内容，再组织目标、重难点、流程、活动、评价和作业，避免空泛模板。',
+    button: '生成教案',
+    materialLabel: '篇名 / 单元导语 / 课后题 / 备课材料',
+    materialPlaceholder: '粘贴篇名、教材版本、单元导语、课后题、已有备课笔记、课堂活动设想。',
+    directionLabel: '课堂要求',
+    directionPlaceholder: '例如：40 分钟常态课；公开课；两课时；要有板书和学生任务。',
+    outputLabel: '交付要求',
+    outputPlaceholder: '例如：完整教案 + 板书 + 作业；或只要课堂流程。',
+    prompt: '请生成一份语文教案，但必须先用王荣生式教学内容判断定住这节课教什么：区分语文课程内容、教材内容、教学内容；再给教学目标、重难点、课堂流程、学生任务、评价方式、板书和作业。不要写成泛泛教案，不要编造官方课标口径。',
+    outputStructure: ['教学内容判定', '教学目标', '重难点', '课堂流程', '学生任务', '评价与作业', '板书设计'],
+  },
+  'speaking-script': {
+    board: 'reading',
+    label: '说课稿',
+    title: '生成有理据的语文说课稿',
+    intro: '说清为什么这样选内容、这样安排活动，而不是堆“教材分析、学情分析”的套话。',
+    button: '生成说课稿',
+    materialLabel: '课题 / 教材线索 / 教案草稿 / 说课要求',
+    materialPlaceholder: '粘贴课题、单元导语、课后题、已有教案、比赛或教研说课要求。',
+    directionLabel: '说课场景',
+    directionPlaceholder: '例如：教研组说课；赛课说课；5 分钟版；10 分钟版。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：完整说课稿 + 设计理据 + 可删减版本。',
+    prompt: '请生成语文说课稿：核心是说明本课教学内容选择的理据，以及目标、内容、活动、评价如何一致。语言要像老师能说出口的说课稿，不要堆空话；涉及课标只做谨慎表述，不冒充官方解释。',
+    outputStructure: ['说教材与内容定位', '说学情', '说目标与重难点', '说教学过程', '说评价与作业', '设计理据'],
+  },
+  'teaching-transcript': {
+    board: 'reading',
+    label: '逐字稿',
+    title: '把备课材料改成课堂逐字稿',
+    intro: '逐字稿服务课堂推进：教师话术、学生动作、追问和板书都要围绕教学内容。',
+    button: '生成逐字稿',
+    materialLabel: '教案 / 活动流程 / 课堂问题 / 文本材料',
+    materialPlaceholder: '粘贴教案、活动流程、问题链、板书草稿、课文片段或课堂要求。',
+    directionLabel: '课堂风格',
+    directionPlaceholder: '例如：启发式；常态课自然语言；公开课更完整；学生基础薄弱。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：教师逐字稿 + 学生可能回答 + 追问 + 板书提示。',
+    prompt: '请把备课材料改成课堂逐字稿：先确认本课教学内容，再把每个环节写成教师可说出口的话、学生要做的动作、可能回答、追问和板书提示。不要只写表演化台词，必须服务教学内容。',
+    outputStructure: ['教学内容确认', '课堂逐字稿', '学生可能回答', '教师追问', '板书提示', '时间分配'],
+  },
+  'content-decision': {
+    board: 'lesson-type',
+    label: '内容判定',
+    title: '先判这一课到底教什么、不教什么',
+    intro: '把课文、单元、课后题、学情和课时放到一起，判断合宜的语文教学内容，避免把课堂做成泛泛感悟。',
+    button: '判定教学内容',
+    materialLabel: '课文 / 单元导语 / 课后题 / 教材线索',
+    materialPlaceholder: '粘贴篇名、教材版本、单元导语、课后题、现有备课想法。资料不全也可以先写已知信息。',
+    directionLabel: '本课困惑',
+    directionPlaceholder: '例如：不知道教语言还是主题；活动很多但主线散；公开课只剩 40 分钟。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：教学内容判定 + 不教清单 + 关键环节理据。',
+    prompt: '请按王荣生式语文教学内容判断处理：先区分语文课程内容、教材内容、教学内容；再根据篇名、单元、课后题、学情和课时判断本课合宜教学内容；明确不教清单；说明每个关键环节服务哪一种语文经验。不要写成泛泛教案，不要抢鼎公作文升格或绍振文学细读主链。',
+    outputStructure: ['材料证据', '三层内容区分', '合宜教学内容', '不教清单', '关键环节与理据', '还需补充的教材证据'],
+  },
+  'lesson-skeleton': {
+    board: 'reading',
+    label: '备课骨架',
+    title: '把阅读课整理成有理据的课堂骨架',
+    intro: '不追求漂亮流程，先保证目标、内容、活动一致，再给可上课的环节骨架。',
+    button: '整理备课骨架',
+    materialLabel: '现有教案 / 课堂想法 / 课文材料',
+    materialPlaceholder: '粘贴已有教案、课堂活动、问题链、板书草稿，或上传 Word、PDF、TXT、Markdown。',
+    directionLabel: '使用场景',
+    directionPlaceholder: '例如：常态课；公开课；集体备课；一课时；两课时。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：目标 + 内容 + 活动 + 评价闭环。',
+    prompt: '请把现有备课材料整理成王荣生式备课骨架：先指出本课教学内容，再重写目标；每个课堂活动必须说明服务哪个教学内容；评价任务要能检验目标。不要代写侵权整篇教案，不做纯审美独白。',
+    outputStructure: ['本课教学内容', '目标重写', '活动取舍', '课堂骨架', '评价任务', '备课理据'],
+  },
+  'unit-alignment': {
+    board: 'reading',
+    label: '单元对齐',
+    title: '检查单篇与单元目标是否对齐',
+    intro: '把单篇课放回单元，判断它承担的是例文、样本、用件还是定篇任务。',
+    button: '检查单元对齐',
+    materialLabel: '单元导语 / 篇目 / 课后题 / 单元任务',
+    materialPlaceholder: '粘贴单元导语、篇目、课后题、语文要素或单元任务要求。',
+    directionLabel: '当前疑问',
+    directionPlaceholder: '例如：这篇课文是不是该重讲主题；单元任务和单篇活动接不上。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：单元定位 + 单篇职责 + 活动调整建议。',
+    prompt: '请按单元教学内容对齐来判断：说明单篇在单元中的职责，判断它更接近定篇、例文、样本还是用件；检查目标、活动、评价是否服务单元语文经验。输出要克制，不冒充官方课标解释权。',
+    outputStructure: ['单元证据', '单篇职责', '选文类型判断', '目标活动评价一致性', '调整建议'],
+  },
+  'writing-content': {
+    board: 'lesson-type',
+    label: '课型判断',
+    title: '按课型判断这一课合宜教什么',
+    intro: '教读、自读、写作、复习、综合性学习都先回到教学内容判断；学生成篇润色、旁批、讲评话术交给鼎公。',
+    button: '判断课型内容',
+    materialLabel: '课型 / 题目 / 训练目标 / 活动草案',
+    materialPlaceholder: '粘贴课型、课题、训练点、学生共性问题、活动设计。若是学生作文全文升格，请转鼎公。',
+    directionLabel: '本次要判断',
+    directionPlaceholder: '例如：这类课到底教什么；活动是否太散；目标是否能评价。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：课型定位 + 教学内容判定 + 活动取舍。',
+    prompt: '请按课型做语文教学内容判断：先判断这是教读、自读、写作、复习还是综合性学习；再说明这一课合宜教什么、训练什么语文经验、活动如何组织、评价如何检验。若涉及学生作文成篇升格、逐段润色和家长反馈话术，明确转给鼎公工作台。',
+    outputStructure: ['课型定位', '教学内容判定', '训练结构', '活动取舍', '评价方式', '与鼎公分工'],
+  },
+  'lesson-diagnosis': {
+    board: 'diagnosis',
+    label: '教案诊断',
+    title: '诊断教案是否目标、内容、活动一致',
+    intro: '先看这份教案真正教了什么，再判断目标和活动是不是互相支持。',
+    button: '诊断教案',
+    materialLabel: '教案 / 说课稿 / 课堂实录 / 听评课记录',
+    materialPlaceholder: '粘贴教案、说课稿、课堂流程、活动设计或评课记录。',
+    directionLabel: '诊断重点',
+    directionPlaceholder: '例如：目标太虚；活动热闹但不知道教什么；评价任务缺失。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：问题清单 + 修改方向 + 重排骨架。',
+    prompt: '请按王荣生式教案诊断：先还原这份教案实际在教什么；检查目标、内容、活动、评价是否一致；指出最影响课堂成立的 1-3 个问题；给出修改后的骨架。不要只润色语言。',
+    outputStructure: ['实际教学内容', '一致性诊断', '关键问题', '修改骨架', '备课理据'],
+  },
+  'activity-alignment': {
+    board: 'diagnosis',
+    label: '活动取舍',
+    title: '判断课堂活动是不是服务教学内容',
+    intro: '活动不按热闹程度判断，而按它服务的语文经验和目标证据判断。',
+    button: '检查活动取舍',
+    materialLabel: '课堂活动 / 问题链 / 学习任务',
+    materialPlaceholder: '粘贴活动流程、课堂问题、小组任务、练习设计或板书。',
+    directionLabel: '想保留或犹豫的活动',
+    directionPlaceholder: '例如：朗读、讨论、表演、仿写、拓展资料是否该留。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：保留 / 修改 / 删除清单。',
+    prompt: '请检查课堂活动取舍：每个活动都要回答它服务哪个教学内容、学生会形成什么语文经验、如何评价。把活动分成保留、修改、删除三类，并说明理由。',
+    outputStructure: ['活动逐项判断', '保留清单', '修改清单', '删除清单', '评价证据'],
+  },
+};
+
+export type PoetryBoardId = 'lesson' | 'reading' | 'diagnosis';
+export type PoetryWorkflowId =
+  | 'lesson-plan'
+  | 'main-questions'
+  | 'recitation'
+  | 'image-structure'
+  | 'allusion-check'
+  | 'material-polish';
+
+export const POETRY_BOARDS: Array<{ id: PoetryBoardId; label: string; hint: string }> = [
+  { id: 'lesson', label: '课堂成品', hint: '教案、主问题、板书与课堂推进' },
+  { id: 'reading', label: '诗词讲读', hint: '诵读声情、意象章法、兴发感动' },
+  { id: 'diagnosis', label: '材料诊改', hint: '检查讲稿、教案和活动是否贴住文本' },
+];
+
+export const POETRY_WORKFLOWS_BY_BOARD: Record<PoetryBoardId, PoetryWorkflowId[]> = {
+  lesson: ['lesson-plan', 'main-questions'],
+  reading: ['recitation', 'image-structure', 'allusion-check'],
+  diagnosis: ['material-polish'],
+};
+
+const POETRY_FLAT_WORKFLOW_IDS: PoetryWorkflowId[] = [
+  'lesson-plan',
+  'main-questions',
+  'recitation',
+  'image-structure',
+  'allusion-check',
+  'material-polish',
+];
+
+export const POETRY_WORKFLOWS: Record<PoetryWorkflowId, {
+  board: PoetryBoardId;
+  label: string;
+  title: string;
+  intro: string;
+  button: string;
+  materialLabel: string;
+  materialPlaceholder: string;
+  directionLabel: string;
+  directionPlaceholder: string;
+  outputLabel: string;
+  outputPlaceholder: string;
+  prompt: string;
+  outputStructure: string[];
+}> = {
+  'lesson-plan': {
+    board: 'lesson',
+    label: '讲读课',
+    title: '生成一节古典诗词讲读课',
+    intro: '从诵读入手，贴住文本证据，形成可上课的讲读层次、主问题和板书。',
+    button: '生成讲读课',
+    materialLabel: '篇目 / 原文 / 注释 / 教材线索',
+    materialPlaceholder: '粘贴诗词原文、篇目、注释、单元要求、已有教案或课堂限制。',
+    directionLabel: '课堂要求',
+    directionPlaceholder: '例如：40 分钟公开课；社团课；初中基础较弱；要有板书和朗读设计。',
+    outputLabel: '交付要求',
+    outputPlaceholder: '例如：教案 + 主问题链 + 板书 + 诵读提示。',
+    prompt: '请生成古典诗词讲读课：先确认文本和学段，再从诵读声情、意象章法、兴发感动、典故查检方向组织课堂。输出要能帮助老师上课，不要写成泛古文翻译工具，不要做作文批改或现代文赋分模板。',
+    outputStructure: ['文本依据', '教学目标', '诵读与声情', '讲读层次', '主问题链', '板书设计', '课堂任务'],
+  },
+  'main-questions': {
+    board: 'lesson',
+    label: '主问题',
+    title: '把诗词讲读整理成课堂主问题链',
+    intro: '主问题从文本里长出来，服务朗读、理解、鉴赏和课堂推进。',
+    button: '生成主问题链',
+    materialLabel: '篇目 / 原文 / 现有问题 / 课堂目标',
+    materialPlaceholder: '粘贴原文、已有问题链、学生卡点或你希望讲清的重点。',
+    directionLabel: '问题链要求',
+    directionPlaceholder: '例如：3 个主问题；适合初二；要能带出意象和情感层次。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：主问题链 + 追问 + 学生活动 + 板书。',
+    prompt: '请为古典诗词课生成主问题链：问题必须贴住文本证据，能带动诵读、意象、章法和兴发感动。不要把问题写成泛泛主题讨论，不要堆典故。',
+    outputStructure: ['核心讲读目标', '主问题链', '追问设计', '学生任务', '板书层次'],
+  },
+  recitation: {
+    board: 'reading',
+    label: '诵读',
+    title: '设计诵读、停顿与声情理解',
+    intro: '用读法进入诗词，不把朗读当装饰，而是帮助学生听见情感和章法。',
+    button: '生成诵读提示',
+    materialLabel: '诗词原文 / 注释 / 朗读困惑',
+    materialPlaceholder: '粘贴原文、注释、学生读不出来的句子或你想处理的声情重点。',
+    directionLabel: '诵读目标',
+    directionPlaceholder: '例如：读出转折；读出沉郁；读出由景入情。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：停顿建议 + 重音提示 + 朗读任务。',
+    prompt: '请设计古典诗词诵读提示：说明停顿、重音、语势和声情如何依据文本而来，并给老师可操作的课堂朗读任务。不要编造固定唯一读法。',
+    outputStructure: ['文本依据', '停顿与重音', '声情说明', '课堂朗读任务', '注意边界'],
+  },
+  'image-structure': {
+    board: 'reading',
+    label: '意象章法',
+    title: '梳理意象脉络、章法结构与兴发感动',
+    intro: '把意象、章法和情感发生过程讲清楚，让鉴赏不是空泛抒情。',
+    button: '梳理讲读层次',
+    materialLabel: '诗词原文 / 注释 / 已有理解',
+    materialPlaceholder: '粘贴原文、注释、学生理解或现有赏析草稿。',
+    directionLabel: '讲读重点',
+    directionPlaceholder: '例如：意象变化；上下片结构；由景到情；兴发感动。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：层次讲读 + 板书 + 学生问题。',
+    prompt: '请梳理古典诗词的意象脉络、章法结构和兴发感动：所有判断必须回到字句证据，避免泛泛主题概括。',
+    outputStructure: ['文本层次', '意象脉络', '章法结构', '兴发感动', '板书建议'],
+  },
+  'allusion-check': {
+    board: 'reading',
+    label: '典故',
+    title: '给出典故、互文与背景的查检方向',
+    intro: '典故只做必要提示，服务理解诗词，不把课堂变成知识堆叠。',
+    button: '生成查检方向',
+    materialLabel: '诗词原文 / 疑似典故 / 注释材料',
+    materialPlaceholder: '粘贴原文、注释、疑似典故、背景材料或学生卡住的词句。',
+    directionLabel: '查检边界',
+    directionPlaceholder: '例如：只要课堂可讲部分；不要展开太多文献；适合初中。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：典故方向 + 课堂讲法 + 不宜展开内容。',
+    prompt: '请给古典诗词典故、互文和背景的查检方向：只提示可靠查检路径和课堂必要讲法，不编造未确认来源，不用典故压过文本讲读。',
+    outputStructure: ['疑点词句', '查检方向', '课堂讲法', '不宜展开内容', '仍需确认材料'],
+  },
+  'material-polish': {
+    board: 'diagnosis',
+    label: '诊改',
+    title: '诊断诗词教案或讲稿是否贴住文本',
+    intro: '检查材料是否从诗词本身出发，是否有诵读、意象、章法和主问题支撑。',
+    button: '诊断并改稿',
+    materialLabel: '教案 / 讲稿 / PPT 文案 / 活动设计',
+    materialPlaceholder: '粘贴已有诗词教案、讲稿、问题链、板书或课堂活动。',
+    directionLabel: '诊改重点',
+    directionPlaceholder: '例如：太像翻译课；问题太散；缺少朗读；典故太多。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：问题清单 + 修改建议 + 可用版本。',
+    prompt: '请诊断诗词教学材料：看它是否贴住文本证据，是否有诵读声情、意象章法、兴发感动和可上课主问题。指出 1-3 个关键问题并给出可用改稿。',
+    outputStructure: ['可用处', '关键问题', '修改方向', '可用改稿', '补充材料'],
+  },
+};
+
 type WorkbenchFieldKey =
   | 'clientName'
   | 'clientBackground'
@@ -277,8 +604,38 @@ const WANGDINGJUN_WORKBENCH: WorkbenchValues = {
   studentLevel: '',
 };
 
+const WANGRONGSHENG_WORKBENCH: WorkbenchValues = {
+  clientName: '',
+  clientBackground: '',
+  background: '',
+  goal: '',
+  material: '',
+  output: '',
+  grade: '',
+  region: '',
+  textbook: '',
+  materialType: '',
+  studentLevel: '',
+};
+
+const YEJIAYING_WORKBENCH: WorkbenchValues = {
+  clientName: '',
+  clientBackground: '',
+  background: '',
+  goal: '',
+  material: '',
+  output: '讲读骨架 + 主问题链 + 诵读提示',
+  grade: '',
+  region: '',
+  textbook: '',
+  materialType: '',
+  studentLevel: '',
+};
+
 function getInitialWorkbench(expertId: string) {
   if (expertId === 'wangdingjun') return { ...WANGDINGJUN_WORKBENCH };
+  if (expertId === 'wangrongsheng') return { ...WANGRONGSHENG_WORKBENCH };
+  if (expertId === 'yejiaying') return { ...YEJIAYING_WORKBENCH };
   return expertId === 'thich-nhat-hanh' ? { ...MINDFULNESS_WORKBENCH } : { ...DEFAULT_WORKBENCH };
 }
 
@@ -303,6 +660,46 @@ function getWorkbenchCopy(expertId: string): WorkbenchCopy {
     };
   }
 
+  if (expertId === 'wangrongsheng') {
+    return {
+      title: '绒绒老师 · 语文教学内容工作台',
+      intro: '请先放入篇名、单元线索、课后题、现有教案或课堂活动。绒绒老师负责判断这一课教什么、不教什么，以及目标、内容、活动、评价是否一致。',
+      button: '开始备课判断',
+      prompt: '请根据语文教学内容与备课决策工作台信息，先判断合宜教学内容，再检查目标、活动、评价的一致性。',
+      outputFallback: '教学内容判定 + 备课理据 + 活动调整',
+      fields: [
+        { key: 'grade', label: '年级', placeholder: '请选择年级', rows: 1, options: ['三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三', '高一', '高二', '高三'] },
+        { key: 'region', label: '地区', placeholder: '省份或城市，例如：江苏南京', rows: 1 },
+        { key: 'textbook', label: '教材版本', placeholder: '请选择教材版本', rows: 1, options: ['统编版', '人教版', '苏教版', '沪教版', '其他', '不确定'] },
+        { key: 'materialType', label: '课型', placeholder: '请选择课型', rows: 1, options: ['教读课', '自读课', '写作课', '单元导读', '复习课', '评课磨课', '不确定'] },
+        { key: 'studentLevel', label: '学情', placeholder: '请选择学情', rows: 1, options: ['基础薄弱', '中等', '较好', '差异很大', '不确定'] },
+        { key: 'material', label: '教材与备课材料', placeholder: '请粘贴篇名、单元导语、课后题、教案、活动设计或听评课记录。', rows: 8 },
+        { key: 'goal', label: '备课困惑', placeholder: '例如：不知道这一课该教语言还是主题；活动很多但主线散。', rows: 2 },
+        { key: 'output', label: '期望产出', placeholder: '例如：教学内容判定 + 不教清单 + 课堂骨架。', rows: 1 },
+      ] satisfies WorkbenchField[],
+    };
+  }
+
+  if (expertId === 'yejiaying') {
+    return {
+      title: '古典诗词讲读工作台',
+      intro: '把篇目、原文、学段、课型和已有理解先放进来。迦陵先生只处理古典诗词讲读、诗词鉴赏、兴发感动与诵读式理解，不做泛古文整理，也不接作文批改和现代文赋分模板。',
+      button: '开始诗词讲读',
+      prompt: '请根据古典诗词讲读工作台信息，围绕文本证据完成讲读、鉴赏、诵读与课堂主问题设计。',
+      outputFallback: '讲读骨架 + 主问题链 + 诵读提示',
+      fields: [
+        { key: 'grade', label: '学段', placeholder: '请选择学段', rows: 1, options: ['小学高年级', '初中', '高中', '大学通识', '成人自学', '不确定'] },
+        { key: 'textbook', label: '教材或版本', placeholder: '例如：统编版九上 / 校本拓展 / 社团课', rows: 1 },
+        { key: 'materialType', label: '材料类型', placeholder: '请选择材料类型', rows: 1, options: ['单首诗', '单首词', '组诗', '词牌专题', '诗人专题', '课堂活动设计'] },
+        { key: 'studentLevel', label: '学习基础', placeholder: '请选择学习基础', rows: 1, options: ['初学', '有基础', '备考复习', '社团拓展', '不确定'] },
+        { key: 'background', label: '使用场景', placeholder: '例如：公开课、社团课、自学带读、课前导入、专题拓展。', rows: 2 },
+        { key: 'material', label: '诗词原文或材料', placeholder: '粘贴篇目、原文、注释、已有教案或你想讲清的问题。没有完整材料时，请至少写明篇目。', rows: 5 },
+        { key: 'goal', label: '本次讲读重点', placeholder: '例如：声情诵读、意象脉络、章法结构、典故查检、主问题链。', rows: 2 },
+        { key: 'output', label: '希望产出', placeholder: '讲读骨架 + 主问题链 + 诵读提示', rows: 1 },
+      ] satisfies WorkbenchField[],
+    };
+  }
+
   const isMindfulness = expertId === 'thich-nhat-hanh';
   if (isMindfulness) {
     return {
@@ -323,10 +720,10 @@ function getWorkbenchCopy(expertId: string): WorkbenchCopy {
   }
 
   return {
-    title: '专家工作台',
+    title: '智脑工作台',
     intro: '把背景、目标和材料先放进来，附件可以在底部上传。',
     button: '用工作台开始判断',
-    prompt: '请根据专家工作台信息先判断关键问题，再给建议。',
+    prompt: '请根据智脑工作台信息先判断关键问题，再给建议。',
     outputFallback: '判断结论 + 行动清单',
     fields: [
       { key: 'background', label: '背景', placeholder: '发生了什么？现在卡在哪里？', rows: 3 },
@@ -399,6 +796,10 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [activeTeacherBoard, setActiveTeacherBoard] = useState<TeacherBoardId>('correction');
   const [activeTeacherWorkflow, setActiveTeacherWorkflow] = useState<TeacherWorkflowId>('essay-correction');
+  const [activeRongshengBoard, setActiveRongshengBoard] = useState<RongshengBoardId>('reading');
+  const [activeRongshengWorkflow, setActiveRongshengWorkflow] = useState<RongshengWorkflowId>('content-decision');
+  const [activePoetryBoard, setActivePoetryBoard] = useState<PoetryBoardId>('lesson');
+  const [activePoetryWorkflow, setActivePoetryWorkflow] = useState<PoetryWorkflowId>('lesson-plan');
   const [teacherLibraryOpen, setTeacherLibraryOpen] = useState(true);
 
   const activeExpertId = conversationExpert.conversationId === conversationId ? conversationExpert.expertId : expertId;
@@ -411,9 +812,14 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
   const displayExpertName = activeExpertId === expertId ? expertName : meta.alias;
   const isMindfulness = activeExpertId === 'thich-nhat-hanh';
   const isWangdingjun = activeExpertId === 'wangdingjun';
+  const isWangrongsheng = activeExpertId === 'wangrongsheng';
+  const isYejiaying = activeExpertId === 'yejiaying';
+  const isStructuredTeacher = isWangdingjun || isWangrongsheng || isYejiaying;
   const workbenchCopy = useMemo(() => getWorkbenchCopy(activeExpertId), [activeExpertId]);
   const workbench = workbenchState.expertId === activeExpertId ? workbenchState.values : getInitialWorkbench(activeExpertId);
   const teacherWorkflow = TEACHER_WORKFLOWS[activeTeacherWorkflow];
+  const rongshengWorkflow = RONGSHENG_WORKFLOWS[activeRongshengWorkflow];
+  const poetryWorkflow = POETRY_WORKFLOWS[activePoetryWorkflow];
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const streamingRef = useRef('');
@@ -469,6 +875,68 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
     setActiveTeacherWorkflow(WORKFLOWS_BY_BOARD[board][0]);
   };
 
+  const switchRongshengBoard = (board: RongshengBoardId) => {
+    setActiveRongshengBoard(board);
+    setActiveRongshengWorkflow(RONGSHENG_WORKFLOWS_BY_BOARD[board][0]);
+  };
+
+  const switchPoetryBoard = (board: PoetryBoardId) => {
+    setActivePoetryBoard(board);
+    setActivePoetryWorkflow(POETRY_WORKFLOWS_BY_BOARD[board][0]);
+  };
+
+  const structuredBoards = isYejiaying ? POETRY_BOARDS : isWangrongsheng ? RONGSHENG_BOARDS : TEACHER_BOARDS;
+  const structuredWorkflow = isYejiaying ? poetryWorkflow : isWangrongsheng ? rongshengWorkflow : teacherWorkflow;
+  const structuredHeaderTitle = isYejiaying ? '迦陵先生诗词教学工作台' : isWangrongsheng ? '绒绒老师教学内容工作台' : '鼎公写作教学工作台';
+  const structuredHeaderHint = isYejiaying
+    ? '任务树定方向，材料库放诗词原文、注释和教案，中间生成讲读课、主问题与诵读设计。'
+    : isWangrongsheng
+    ? '围绕教案、说课稿、逐字稿和诊断改稿，先定教学内容，再生成可交付材料。'
+    : '任务树定方向，材料库供依据，中间生成成品与鼎公意见。';
+  const structuredEmptyHint = isYejiaying
+    ? '先选课堂成品、诗词讲读或材料诊改，再放入篇目、原文、注释、教案或课堂要求。'
+    : isWangrongsheng
+    ? '先选教案、说课稿、逐字稿或诊断改稿，再放入课文、单元导语、课后题、教案或活动设计。'
+    : '在左侧选择任务，在右侧放入作文、教案、讲义、说课稿或素材。开始后，这里会显示鼎公生成的成品和修改意见。';
+  const structuredQuestions = isYejiaying ? YEJIAYING_QUESTIONS : isWangrongsheng ? WANGRONGSHENG_QUESTIONS : WANGDINGJUN_QUESTIONS;
+  const getStructuredWorkflows = (boardId: string) => (
+    isYejiaying
+      ? POETRY_WORKFLOWS_BY_BOARD[boardId as PoetryBoardId]
+      : isWangrongsheng
+      ? RONGSHENG_WORKFLOWS_BY_BOARD[boardId as RongshengBoardId]
+      : WORKFLOWS_BY_BOARD[boardId as TeacherBoardId]
+  );
+  const getStructuredWorkflow = (workflowId: string) => (
+    isYejiaying
+      ? POETRY_WORKFLOWS[workflowId as PoetryWorkflowId]
+      : isWangrongsheng
+      ? RONGSHENG_WORKFLOWS[workflowId as RongshengWorkflowId]
+      : TEACHER_WORKFLOWS[workflowId as TeacherWorkflowId]
+  );
+  const isStructuredBoardActive = (boardId: string) => (
+    isYejiaying ? activePoetryBoard === boardId : isWangrongsheng ? activeRongshengBoard === boardId : activeTeacherBoard === boardId
+  );
+  const isStructuredWorkflowActive = (workflowId: string) => (
+    isYejiaying ? activePoetryWorkflow === workflowId : isWangrongsheng ? activeRongshengWorkflow === workflowId : activeTeacherWorkflow === workflowId
+  );
+  const selectStructuredBoard = (boardId: string) => {
+    if (isYejiaying) switchPoetryBoard(boardId as PoetryBoardId);
+    else if (isWangrongsheng) switchRongshengBoard(boardId as RongshengBoardId);
+    else switchTeacherBoard(boardId as TeacherBoardId);
+  };
+  const selectStructuredWorkflow = (boardId: string, workflowId: string) => {
+    if (isYejiaying) {
+      setActivePoetryBoard(boardId as PoetryBoardId);
+      setActivePoetryWorkflow(workflowId as PoetryWorkflowId);
+    } else if (isWangrongsheng) {
+      setActiveRongshengBoard(boardId as RongshengBoardId);
+      setActiveRongshengWorkflow(workflowId as RongshengWorkflowId);
+    } else {
+      setActiveTeacherBoard(boardId as TeacherBoardId);
+      setActiveTeacherWorkflow(workflowId as TeacherWorkflowId);
+    }
+  };
+
   const buildUserMessage = (text: string) => {
     if (isWangdingjun) {
       return [
@@ -501,6 +969,69 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
       ].join('\n');
     }
 
+    if (isWangrongsheng) {
+      return [
+        text.trim(),
+        '',
+        `【绒绒老师工作台 · ${RONGSHENG_BOARDS.find(item => item.id === rongshengWorkflow.board)?.label} · ${rongshengWorkflow.label}】`,
+        `年级：${workbench.grade || '未填写'}`,
+        `地区：${workbench.region || '未填写'}`,
+        `教材版本：${workbench.textbook || '未填写'}`,
+        `课型：${workbench.materialType || '未填写'}`,
+        `学情：${workbench.studentLevel || '未填写'}`,
+        `工作流：${rongshengWorkflow.title}`,
+        `公共背景：${workbench.background || '未填写'}`,
+        `本次困惑：${workbench.goal || '未填写'}`,
+        `希望产出：${workbench.output || '未填写'}`,
+        '',
+        `【${rongshengWorkflow.materialLabel}】`,
+        workbench.material || '未填写',
+        '',
+        '【工作流指令】',
+        rongshengWorkflow.prompt,
+        '',
+        '【输出结构】',
+        ...rongshengWorkflow.outputStructure.map((item, index) => `${index + 1}. ${item}`),
+        '',
+        '【产品定位】',
+        '这个工具服务一线语文老师、教研组和教培备课负责人。核心不是代写漂亮教案，而是用王荣生语文课程与教学论的框架，帮助老师判断一节课合宜的语文教学内容是什么、哪些内容不该教、目标和活动是否一致。',
+        '',
+        '【边界要求】',
+        '所有字段都可留空；如果用户上传了附件，请优先阅读附件，把附件当成本次工作流核心材料。只做语文教学内容判断、备课理据、课型内容诊断、课堂活动取舍、评课磨课与单元对齐；学生作文成篇润色、旁批、讲评话术转给鼎公；文学文本细读主链和主问题细读演示转给绍振细读。不要冒充官方课标解释权、命题组口径或王荣生本人即时意见。',
+      ].join('\n');
+    }
+
+    if (activeExpertId === 'yejiaying') {
+      return [
+        text.trim(),
+        '',
+        `【迦陵先生工作台 · ${POETRY_BOARDS.find(item => item.id === poetryWorkflow.board)?.label} · ${poetryWorkflow.label}】`,
+        `学段：${workbench.grade || '未填写'}`,
+        `教材或版本：${workbench.textbook || '未填写'}`,
+        `材料类型：${workbench.materialType || '未填写'}`,
+        `学习基础：${workbench.studentLevel || '未填写'}`,
+        `工作流：${poetryWorkflow.title}`,
+        `使用场景：${workbench.background || '未填写'}`,
+        `本次讲读重点：${workbench.goal || '未填写'}`,
+        `希望产出：${workbench.output || '未填写'}`,
+        '',
+        `【${poetryWorkflow.materialLabel}】`,
+        workbench.material || '未填写',
+        '',
+        '【工作流指令】',
+        poetryWorkflow.prompt,
+        '',
+        '【输出结构】',
+        ...poetryWorkflow.outputStructure.map((item, index) => `${index + 1}. ${item}`),
+        '',
+        '【产品定位】',
+        '这个智脑服务一线语文老师的古典诗词教学：帮助老师把单首或组诗词从诵读声情、意象章法、兴发感动、典故查检和课堂主问题上讲清楚，形成可上课的讲读方案。',
+        '',
+        '【边界要求】',
+        '所有字段都可留空；如果用户上传了附件，请优先阅读附件，把附件当成本次工作流核心材料。只处理古典诗词讲读、诗词鉴赏、自学带读、社团课、教案讲稿诊改与课堂主问题设计；不要接作文批改、现代文阅读赋分模板、泛文言文翻译工具、整篇代写赏析发表。材料不足时先基于已给篇目谨慎讲读，并列出需要补充的原文、注释或教材信息。',
+      ].join('\n');
+    }
+
     if (isMindfulness) {
       return [
         text.trim(),
@@ -521,7 +1052,7 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
     const parts = [
       text.trim(),
       '',
-      '【专家工作台】',
+      '【智脑工作台】',
       `背景：${workbench.background || '未填写'}`,
       `目标：${workbench.goal || '未填写'}`,
       `材料要点：${workbench.material || '未填写'}`,
@@ -617,157 +1148,155 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
     );
   };
 
-  if (isWangdingjun) {
+  if (isWangrongsheng) {
+    const deliveryWorkflows = RONGSHENG_WORKFLOWS_BY_BOARD.reading.map(id => RONGSHENG_WORKFLOWS[id]);
+    const evidenceWorkflows = [...RONGSHENG_WORKFLOWS_BY_BOARD['lesson-type'], ...RONGSHENG_WORKFLOWS_BY_BOARD.diagnosis].map(id => RONGSHENG_WORKFLOWS[id]);
+
     return (
       <div className="flex h-screen flex-col overflow-hidden bg-[#f7f4ee] text-stone-950">
-        <header className="shrink-0 border-b border-stone-200/70 bg-[#fffaf2]/82 px-4 py-2.5 shadow-[0_1px_20px_rgba(80,64,42,0.05)] backdrop-blur-xl">
-          <div className="mx-auto flex max-w-[1440px] items-center gap-3">
+        <header className="shrink-0 border-b border-stone-200/70 bg-[#fffaf2]/86 px-4 py-2.5 shadow-[0_1px_20px_rgba(80,64,42,0.05)] backdrop-blur-xl">
+          <div className="mx-auto flex max-w-[1400px] items-center gap-3">
             <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded-full border border-stone-200 bg-white/85 text-lg text-stone-600 shadow-sm transition hover:bg-white" title="返回">
               ←
             </button>
             <button onClick={onOpenHome} className="rounded-full border border-stone-200 bg-white/85 px-4 py-2 text-sm font-black text-stone-700 shadow-sm transition hover:bg-white">
               首页
             </button>
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate text-base font-semibold text-stone-950">鼎公写作教学工作台</h1>
-              <p className="truncate text-xs text-stone-500">任务树定方向，材料库供依据，中间生成成品与鼎公意见。</p>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#ede3d4]">
+              <img src={meta.avatar} alt={meta.alias} className="h-full w-full object-cover" onError={event => { event.currentTarget.style.display = 'none'; }} />
             </div>
-            <button onClick={() => setTeacherLibraryOpen(prev => !prev)} className="rounded-full border border-stone-200 bg-white/85 px-4 py-2 text-xs font-black text-stone-600 shadow-sm transition hover:bg-white">
-              {teacherLibraryOpen ? '收起材料库' : '展开材料库'}
-            </button>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-base font-semibold text-stone-950">绒绒老师语文备课工作台</h1>
+              <p className="truncate text-xs text-stone-500">围绕教案、说课稿、逐字稿和评课诊断，先定教学内容，再生成可交付材料。</p>
+            </div>
             <button onClick={onOpenCredits} className="rounded-full border border-stone-200 bg-white/85 px-4 py-2 text-xs font-black text-stone-600 shadow-sm">
               积分
             </button>
           </div>
         </header>
 
-        <main className={`mx-auto grid min-h-0 w-full max-w-[1440px] flex-1 gap-3 p-3 transition-[grid-template-columns] duration-300 ${teacherLibraryOpen ? 'grid-cols-[292px_minmax(0,1fr)_292px]' : 'grid-cols-[292px_minmax(0,1fr)_52px]'}`}>
+        <main className="mx-auto grid min-h-0 w-full max-w-[1400px] flex-1 grid-cols-[340px_minmax(0,1fr)] gap-3 p-3">
           <aside className="flex min-h-0 flex-col overflow-hidden rounded-[22px] border border-stone-200/80 bg-[#fffaf2]/86 shadow-[0_14px_36px_rgba(80,64,42,0.06)]">
-            <div className="border-b border-stone-200/80 p-3">
-              <div className="flex items-center gap-2.5">
-                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-2xl bg-[#f0e9dd]">
-                  <img src={meta.avatar} alt={meta.alias} className="h-full w-full object-cover" onError={event => { event.currentTarget.style.display = 'none'; }} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[15px] font-semibold text-stone-950">任务树</p>
-                  <p className="mt-0.5 truncate text-xs leading-5 text-stone-500">{teacherWorkflow.title}</p>
-                </div>
-              </div>
+            <div className="border-b border-stone-200/80 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a5a35]">备课材料</p>
+              <h2 className="mt-1 text-lg font-semibold text-stone-950">先把课放进来</h2>
+              <p className="mt-1 text-xs leading-5 text-stone-500">篇名、单元导语、课后题、已有教案、说课要求、课堂活动都可以先放这里。</p>
             </div>
 
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-              <div className="space-y-2">
-                {TEACHER_BOARDS.map(board => (
-                  <div key={board.id} className="overflow-hidden rounded-2xl border border-[#eadfce] bg-white p-2">
-                    <button
-                      type="button"
-                      onClick={() => switchTeacherBoard(board.id)}
-                      className={`w-full rounded-xl px-2.5 py-2 text-left transition ${activeTeacherBoard === board.id ? 'bg-[#2f251d] text-white' : 'bg-[#f8f4ed] text-stone-800 hover:bg-[#f2eadf]'}`}
-                    >
-                      <span className="block text-[13px] font-semibold">{board.label}</span>
-                      <span className={`mt-1 block whitespace-normal break-words text-[11px] leading-4 ${activeTeacherBoard === board.id ? 'text-white/70' : 'text-stone-500'}`}>{board.hint}</span>
-                    </button>
-                    <div className="mt-2 grid gap-1.5">
-                      {WORKFLOWS_BY_BOARD[board.id].map(workflowId => {
-                        const workflow = TEACHER_WORKFLOWS[workflowId];
-                        const active = activeTeacherWorkflow === workflowId;
-                        return (
-                          <button
-                            key={workflowId}
-                            type="button"
-                            onClick={() => {
-                              setActiveTeacherBoard(board.id);
-                              setActiveTeacherWorkflow(workflowId);
-                            }}
-                            className={`min-w-0 rounded-xl px-2.5 py-1.5 text-left text-xs transition ${active ? 'bg-[#f0e4d3] text-[#5c3d24]' : 'text-stone-600 hover:bg-[#faf7f2]'}`}
-                          >
-                            <span className="font-semibold">{workflow.label}</span>
-                            <span className="mt-0.5 block whitespace-normal break-words text-[11px] leading-4 opacity-75">{workflow.title}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-black text-stone-700">年级</span>
+                  <select value={workbench.grade} onChange={event => updateWorkbenchValue('grade', event.target.value)} className="h-9 w-full rounded-xl border border-[#eadfce] bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#8a5a35]">
+                    <option value="">可不选</option>
+                    {['三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三', '高一', '高二', '高三'].map(item => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-black text-stone-700">课型</span>
+                  <select value={workbench.materialType} onChange={event => updateWorkbenchValue('materialType', event.target.value)} className="h-9 w-full rounded-xl border border-[#eadfce] bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#8a5a35]">
+                    <option value="">可不选</option>
+                    {['教读课', '自读课', '写作课', '单元导读', '复习课', '评课磨课', '不确定'].map(item => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                </label>
               </div>
 
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full rounded-2xl border border-[#eadfce] bg-white px-3 py-3 text-left shadow-sm transition hover:border-[#d8c5aa] hover:bg-[#fffdf8]"
-              >
+              <div className="grid grid-cols-2 gap-2">
+                <input value={workbench.textbook} onChange={event => updateWorkbenchValue('textbook', event.target.value)} placeholder="教材版本" className="h-9 rounded-xl border border-[#eadfce] bg-white px-3 text-xs outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" />
+                <input value={workbench.studentLevel} onChange={event => updateWorkbenchValue('studentLevel', event.target.value)} placeholder="学情简述" className="h-9 rounded-xl border border-[#eadfce] bg-white px-3 text-xs outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" />
+              </div>
+
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-black text-stone-700">教材与备课材料</span>
+                <textarea
+                  value={workbench.material}
+                  onChange={event => updateWorkbenchValue('material', event.target.value)}
+                  placeholder="粘贴篇名、单元导语、课后题、已有教案、说课稿要求、活动流程或课堂逐字稿草稿。"
+                  rows={10}
+                  className="w-full resize-none rounded-2xl border border-[#eadfce] bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-black text-stone-700">本次要求</span>
+                <textarea
+                  value={workbench.goal}
+                  onChange={event => updateWorkbenchValue('goal', event.target.value)}
+                  placeholder="例如：要一份 40 分钟教案；要 8 分钟说课稿；要把流程改成逐字稿；要诊断目标和活动是否一致。"
+                  rows={3}
+                  className="w-full resize-none rounded-2xl border border-[#eadfce] bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]"
+                />
+              </label>
+
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full rounded-2xl border border-dashed border-[#d8c5aa] bg-white px-3 py-3 text-left transition hover:bg-[#fffdf8]">
                 <span className="block text-[13px] font-semibold text-stone-950">上传资料</span>
-                <span className="mt-1 block text-xs leading-5 text-stone-500">作文、教案、讲义、说课稿、素材包都可以。</span>
+                <span className="mt-1 block text-xs leading-5 text-stone-500">支持 Word、PDF、TXT、Markdown。</span>
               </button>
 
               {pendingFiles.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-black text-stone-500">待发送资料</p>
+                <div className="grid gap-2">
                   {pendingFiles.map((file, index) => (
-                    <div key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-700">
+                    <div key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-xl bg-[#fbf6ee] px-3 py-2 text-xs text-stone-700">
                       <span className="min-w-0 flex-1 truncate font-semibold">{file.name}</span>
                       <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="移除">x</button>
                     </div>
                   ))}
                 </div>
               )}
-
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-black text-stone-700">公共背景（可选）</span>
-                <textarea
-                  value={workbench.background}
-                  onChange={event => updateWorkbenchValue('background', event.target.value)}
-                  placeholder="例如：初二小班、最近在训练细节描写、学生普遍结构松散。也可以留空。"
-                  rows={4}
-                  className="w-full rounded-xl border border-[#eadfce] bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]"
-                />
-              </label>
-
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-black text-stone-700">年级</span>
-                  <select value={workbench.grade} onChange={event => updateWorkbenchValue('grade', event.target.value)} className="h-9 w-full rounded-xl border border-[#eadfce] bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#8a5a35]">
-                    <option value="">可不选</option>
-                    <option value="三年级">三年级</option>
-                    <option value="四年级">四年级</option>
-                    <option value="五年级">五年级</option>
-                    <option value="六年级">六年级</option>
-                    <option value="初一">初一</option>
-                    <option value="初二">初二</option>
-                    <option value="初三">初三</option>
-                    <option value="高一">高一</option>
-                    <option value="高二">高二</option>
-                    <option value="高三">高三</option>
-                  </select>
-                </label>
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-black text-stone-700">水平</span>
-                  <select value={workbench.studentLevel} onChange={event => updateWorkbenchValue('studentLevel', event.target.value)} className="h-9 w-full rounded-xl border border-[#eadfce] bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#8a5a35]">
-                    <option value="">可不选</option>
-                    <option value="基础薄弱">基础薄弱</option>
-                    <option value="中等">中等</option>
-                    <option value="较好">较好</option>
-                    <option value="不确定">不确定</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="rounded-2xl border border-[#eadfce] bg-[#fbf6ee] px-3 py-2.5 text-xs leading-5 text-stone-600">
-                <p className="font-semibold text-stone-800">使用方式</p>
-                <p className="mt-1">左侧选任务，中间出成品和意见，右侧按需展开材料库。</p>
-              </div>
             </div>
           </aside>
 
-          <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-[22px] border border-stone-200/80 bg-white shadow-[0_14px_36px_rgba(80,64,42,0.06)]">
+          <section className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden rounded-[22px] border border-stone-200/80 bg-white shadow-[0_14px_36px_rgba(80,64,42,0.06)]">
             <div className="border-b border-stone-200 bg-white p-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold text-[#8a5a35]">{TEACHER_BOARDS.find(item => item.id === teacherWorkflow.board)?.label} / {teacherWorkflow.label}</p>
-                  <h2 className="mt-1 text-lg font-semibold text-stone-950">{teacherWorkflow.title}</h2>
-                  <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-500">{teacherWorkflow.intro}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a5a35]">交付类型</p>
+                  <h2 className="mt-1 text-xl font-semibold text-stone-950">{rongshengWorkflow.title}</h2>
+                  <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-500">{rongshengWorkflow.intro}</p>
                 </div>
-                <span className="shrink-0 rounded-full bg-[#f3eadc] px-2.5 py-1 text-[11px] font-semibold text-[#7a4c2c]">字段可空</span>
+                <span className="shrink-0 rounded-full bg-[#f3eadc] px-2.5 py-1 text-[11px] font-semibold text-[#7a4c2c]">先定内容</span>
+              </div>
+            </div>
+
+            <div className="border-b border-stone-200 bg-[#fffaf2] p-3">
+              <div className="grid gap-2 md:grid-cols-3">
+                {deliveryWorkflows.map(workflow => {
+                  const active = activeRongshengWorkflow === Object.keys(RONGSHENG_WORKFLOWS).find(key => RONGSHENG_WORKFLOWS[key as RongshengWorkflowId] === workflow);
+                  const workflowId = Object.entries(RONGSHENG_WORKFLOWS).find(([, value]) => value === workflow)?.[0] as RongshengWorkflowId;
+                  return (
+                    <button
+                      key={workflow.label}
+                      type="button"
+                      onClick={() => {
+                        setActiveRongshengBoard('reading');
+                        setActiveRongshengWorkflow(workflowId);
+                      }}
+                      className={`rounded-2xl border px-3 py-3 text-left transition ${active ? 'border-[#2f251d] bg-[#2f251d] text-white' : 'border-[#eadfce] bg-white text-stone-800 hover:border-[#d8c5aa]'}`}
+                    >
+                      <span className="block text-sm font-semibold">{workflow.label}</span>
+                      <span className={`mt-1 block text-xs leading-5 ${active ? 'text-white/68' : 'text-stone-500'}`}>{workflow.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {evidenceWorkflows.map(workflow => {
+                  const workflowId = Object.entries(RONGSHENG_WORKFLOWS).find(([, value]) => value === workflow)?.[0] as RongshengWorkflowId;
+                  const active = activeRongshengWorkflow === workflowId;
+                  return (
+                    <button
+                      key={workflow.label}
+                      type="button"
+                      onClick={() => {
+                        setActiveRongshengBoard(workflow.board);
+                        setActiveRongshengWorkflow(workflowId);
+                      }}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${active ? 'border-[#8a5a35] bg-[#f0e4d3] text-[#5c3d24]' : 'border-[#eadfce] bg-white text-stone-500 hover:text-stone-800'}`}
+                    >
+                      {workflow.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -781,22 +1310,15 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
               {messagesLoading && <div className="py-16 text-center text-sm text-stone-400">加载中...</div>}
               {messagesError && <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">消息加载失败，请返回重试。</div>}
               {!messagesLoading && !messagesError && messages.length === 0 && !sending && (
-                <div className="flex h-full min-h-[420px] flex-col">
-                  <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-[#eadfce] bg-white/55 px-6 py-10">
-                    <div className="max-w-md text-center">
-                      <p className="text-[13px] font-semibold text-stone-500">工作区空白</p>
-                      <p className="mt-2 text-xs leading-6 text-stone-400">在左侧选择任务，在右侧放入作文、教案、讲义、说课稿或素材。开始后，这里会显示鼎公生成的成品和修改意见。</p>
-                      <div className="mt-5 flex flex-wrap justify-center gap-2">
-                        {WANGDINGJUN_QUESTIONS.map(question => (
-                          <button key={question} type="button" onClick={() => sendText(question)} className="rounded-full border border-[#eadfce] bg-white/80 px-3 py-1.5 text-[11px] font-semibold text-stone-500 transition hover:border-[#d8c5aa] hover:text-stone-700">
-                            {question}
-                          </button>
-                        ))}
-                      </div>
-                      <button onClick={() => sendText(teacherWorkflow.prompt)} disabled={sending} className="mt-4 rounded-full bg-[#2f251d] px-4 py-2 text-xs font-semibold text-white shadow-sm disabled:opacity-40">
-                        {teacherWorkflow.button}
+                <div className="rounded-2xl border border-dashed border-[#eadfce] bg-white/65 px-6 py-8 text-center">
+                  <p className="text-base font-semibold text-stone-900">选择成品类型，放入备课材料，就可以开始。</p>
+                  <p className="mx-auto mt-2 max-w-lg text-xs leading-6 text-stone-500">绒绒老师会先判断本课合宜的教学内容，再生成教案、说课稿、逐字稿或诊断改稿，不把课堂写成空模板。</p>
+                  <div className="mt-5 flex flex-wrap justify-center gap-2">
+                    {WANGRONGSHENG_QUESTIONS.map(question => (
+                      <button key={question} type="button" onClick={() => sendText(question)} className="rounded-full border border-[#eadfce] bg-white/80 px-3 py-1.5 text-[11px] font-semibold text-stone-500 transition hover:border-[#d8c5aa] hover:text-stone-700">
+                        {question}
                       </button>
-                    </div>
+                    ))}
                   </div>
                 </div>
               )}
@@ -813,7 +1335,7 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
                           <button onClick={() => { navigator.clipboard.writeText(msg.content); showToast('已复制', 'info'); }} className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-black text-stone-600 transition hover:bg-white">
                             复制
                           </button>
-                          <button onClick={() => downloadWordDocument(conversationTitle || teacherWorkflow.title || 'AI 回答', msg.content)} className="rounded-lg border border-[#eadfce] bg-[#fbf6ee] px-3 py-1.5 text-xs font-black text-[#7a4c2c] transition hover:bg-white">
+                          <button onClick={() => downloadWordDocument(conversationTitle || rongshengWorkflow.title || 'AI 回答', msg.content)} className="rounded-lg border border-[#eadfce] bg-[#fbf6ee] px-3 py-1.5 text-xs font-black text-[#7a4c2c] transition hover:bg-white">
                             下载 Word
                           </button>
                         </div>
@@ -849,8 +1371,264 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
                   placeholder={sending ? '等待 AI 回复中...' : '补充要求，也可以只发附件'}
                   className="min-w-0 flex-1 rounded-xl border border-stone-300 bg-white px-3 py-2 text-[13px] text-stone-900 outline-none placeholder:text-stone-400 focus:border-[#8a5a35] focus:ring-1 focus:ring-[#8a5a35]/20"
                 />
-                <button onClick={() => sendText(teacherWorkflow.prompt)} disabled={sending} className="shrink-0 rounded-xl bg-[#2f251d] px-4 py-2 text-[13px] font-semibold text-white shadow transition hover:bg-[#4a3728] disabled:opacity-40">
-                  {teacherWorkflow.button}
+                <button onClick={() => sendText(rongshengWorkflow.prompt)} disabled={sending} className="shrink-0 rounded-xl bg-[#2f251d] px-4 py-2 text-[13px] font-semibold text-white shadow transition hover:bg-[#4a3728] disabled:opacity-40">
+                  {rongshengWorkflow.button}
+                </button>
+                <button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-stone-900 text-white shadow transition hover:bg-stone-800 disabled:opacity-40" title="发送补充">
+                  →
+                </button>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
+  if (isStructuredTeacher) {
+    return (
+      <div className="flex h-screen flex-col overflow-hidden bg-[#f7f4ee] text-stone-950">
+        <header className="shrink-0 border-b border-stone-200/70 bg-[#fffaf2]/82 px-4 py-2.5 shadow-[0_1px_20px_rgba(80,64,42,0.05)] backdrop-blur-xl">
+          <div className="mx-auto flex max-w-[1440px] items-center gap-3">
+            <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded-full border border-stone-200 bg-white/85 text-lg text-stone-600 shadow-sm transition hover:bg-white" title="返回">
+              ←
+            </button>
+            <button onClick={onOpenHome} className="rounded-full border border-stone-200 bg-white/85 px-4 py-2 text-sm font-black text-stone-700 shadow-sm transition hover:bg-white">
+              首页
+            </button>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-base font-semibold text-stone-950">{structuredHeaderTitle}</h1>
+              <p className="truncate text-xs text-stone-500">{structuredHeaderHint}</p>
+            </div>
+            <button onClick={() => setTeacherLibraryOpen(prev => !prev)} className="rounded-full border border-stone-200 bg-white/85 px-4 py-2 text-xs font-black text-stone-600 shadow-sm transition hover:bg-white">
+              {teacherLibraryOpen ? '收起材料库' : '展开材料库'}
+            </button>
+            <button onClick={onOpenCredits} className="rounded-full border border-stone-200 bg-white/85 px-4 py-2 text-xs font-black text-stone-600 shadow-sm">
+              积分
+            </button>
+          </div>
+        </header>
+
+        <main className={`mx-auto grid min-h-0 w-full max-w-[1440px] flex-1 gap-3 p-3 transition-[grid-template-columns] duration-300 ${teacherLibraryOpen ? 'grid-cols-[292px_minmax(0,1fr)_292px]' : 'grid-cols-[292px_minmax(0,1fr)_52px]'}`}>
+          <aside className="flex min-h-0 flex-col overflow-hidden rounded-[22px] border border-stone-200/80 bg-[#fffaf2]/86 shadow-[0_14px_36px_rgba(80,64,42,0.06)]">
+            <div className="border-b border-stone-200/80 p-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-2xl bg-[#f0e9dd]">
+                  <img src={meta.avatar} alt={meta.alias} className="h-full w-full object-cover" onError={event => { event.currentTarget.style.display = 'none'; }} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[15px] font-semibold text-stone-950">{isYejiaying ? '诗词教学入口' : '任务树'}</p>
+                  <p className="mt-0.5 truncate text-xs leading-5 text-stone-500">{structuredWorkflow.title}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+              <div className="space-y-2">
+                {isYejiaying ? (
+                  <div className="grid gap-2">
+                    {POETRY_FLAT_WORKFLOW_IDS.map(workflowId => {
+                      const workflow = POETRY_WORKFLOWS[workflowId];
+                      const active = activePoetryWorkflow === workflowId;
+                      return (
+                        <button
+                          key={workflowId}
+                          type="button"
+                          onClick={() => {
+                            setActivePoetryBoard(workflow.board);
+                            setActivePoetryWorkflow(workflowId);
+                          }}
+                          className={`min-w-0 rounded-2xl border px-3 py-2.5 text-left transition ${active ? 'border-[#2f251d] bg-[#2f251d] text-white shadow-sm' : 'border-[#eadfce] bg-white text-stone-800 hover:border-[#d8c5aa] hover:bg-[#fffdf8]'}`}
+                        >
+                          <span className="block text-[13px] font-semibold">{workflow.label}</span>
+                          <span className={`mt-1 block whitespace-normal break-words text-[11px] leading-4 ${active ? 'text-white/70' : 'text-stone-500'}`}>{workflow.title}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : structuredBoards.map(board => (
+                  <div key={board.id} className="overflow-hidden rounded-2xl border border-[#eadfce] bg-white p-2">
+                    <button
+                      type="button"
+                      onClick={() => selectStructuredBoard(board.id)}
+                      className={`w-full rounded-xl px-2.5 py-2 text-left transition ${isStructuredBoardActive(board.id) ? 'bg-[#2f251d] text-white' : 'bg-[#f8f4ed] text-stone-800 hover:bg-[#f2eadf]'}`}
+                    >
+                      <span className="block text-[13px] font-semibold">{board.label}</span>
+                      <span className={`mt-1 block whitespace-normal break-words text-[11px] leading-4 ${isStructuredBoardActive(board.id) ? 'text-white/70' : 'text-stone-500'}`}>{board.hint}</span>
+                    </button>
+                    <div className="mt-2 grid gap-1.5">
+                      {getStructuredWorkflows(board.id).map(workflowId => {
+                        const workflow = getStructuredWorkflow(workflowId);
+                        const active = isStructuredWorkflowActive(workflowId);
+                        return (
+                          <button
+                            key={workflowId}
+                            type="button"
+                            onClick={() => selectStructuredWorkflow(board.id, workflowId)}
+                            className={`min-w-0 rounded-xl px-2.5 py-1.5 text-left text-xs transition ${active ? 'bg-[#f0e4d3] text-[#5c3d24]' : 'text-stone-600 hover:bg-[#faf7f2]'}`}
+                          >
+                            <span className="font-semibold">{workflow.label}</span>
+                            <span className="mt-0.5 block whitespace-normal break-words text-[11px] leading-4 opacity-75">{workflow.title}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full rounded-2xl border border-[#eadfce] bg-white px-3 py-3 text-left shadow-sm transition hover:border-[#d8c5aa] hover:bg-[#fffdf8]"
+              >
+                <span className="block text-[13px] font-semibold text-stone-950">上传资料</span>
+                <span className="mt-1 block text-xs leading-5 text-stone-500">{isYejiaying ? '诗词原文、注释、讲稿、板书和课堂要求都可以。' : isWangrongsheng ? '课文、课后题、教案、活动设计、听评课记录都可以。' : '作文、教案、讲义、说课稿、素材包都可以。'}</span>
+              </button>
+
+              {pendingFiles.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-black text-stone-500">待发送资料</p>
+                  {pendingFiles.map((file, index) => (
+                    <div key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-700">
+                      <span className="min-w-0 flex-1 truncate font-semibold">{file.name}</span>
+                      <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="移除">x</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-black text-stone-700">公共背景（可选）</span>
+                    <textarea
+                      value={workbench.background}
+                      onChange={event => updateWorkbenchValue('background', event.target.value)}
+                      placeholder={isYejiaying ? '例如：初二统编版、社团课、学生能背但不会讲出意象和情感层次。也可以留空。' : isWangrongsheng ? '例如：初二统编版、单元在训练人物描写、学生读文本容易只谈主题。也可以留空。' : '例如：初二小班、最近在训练细节描写、学生普遍结构松散。也可以留空。'}
+                      rows={4}
+                      className="w-full rounded-xl border border-[#eadfce] bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]"
+                    />
+                  </label>
+
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-black text-stone-700">{isYejiaying ? '学段' : '年级'}</span>
+                  <select value={workbench.grade} onChange={event => updateWorkbenchValue('grade', event.target.value)} className="h-9 w-full rounded-xl border border-[#eadfce] bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#8a5a35]">
+                    <option value="">可不选</option>
+                    {(isYejiaying ? ['小学高年级', '初中', '高中', '大学通识', '成人自学', '不确定'] : ['三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三', '高一', '高二', '高三']).map(item => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-black text-stone-700">{isYejiaying ? '基础' : '水平'}</span>
+                  <select value={workbench.studentLevel} onChange={event => updateWorkbenchValue('studentLevel', event.target.value)} className="h-9 w-full rounded-xl border border-[#eadfce] bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#8a5a35]">
+                    <option value="">可不选</option>
+                    {(isYejiaying ? ['初学', '有基础', '备考复习', '社团拓展', '不确定'] : ['基础薄弱', '中等', '较好', '不确定']).map(item => (
+                      <option key={item} value={item}>{item}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="rounded-2xl border border-[#eadfce] bg-[#fbf6ee] px-3 py-2.5 text-xs leading-5 text-stone-600">
+                <p className="font-semibold text-stone-800">使用方式</p>
+                  <p className="mt-1">{isYejiaying ? '左侧选诗词教学任务，中间出讲读方案，右侧补原文、注释、讲稿和课堂要求。' : isWangrongsheng ? '左侧选任务，中间出教学内容判断，右侧补教材证据和活动材料。' : '左侧选任务，中间出成品和意见，右侧按需展开材料库。'}</p>
+              </div>
+            </div>
+          </aside>
+
+          <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-[22px] border border-stone-200/80 bg-white shadow-[0_14px_36px_rgba(80,64,42,0.06)]">
+            <div className="border-b border-stone-200 bg-white p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold text-[#8a5a35]">{isYejiaying ? '诗词教学' : structuredBoards.find(item => item.id === structuredWorkflow.board)?.label} / {structuredWorkflow.label}</p>
+                  <h2 className="mt-1 text-lg font-semibold text-stone-950">{structuredWorkflow.title}</h2>
+                  <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-500">{structuredWorkflow.intro}</p>
+                </div>
+                <span className="shrink-0 rounded-full bg-[#f3eadc] px-2.5 py-1 text-[11px] font-semibold text-[#7a4c2c]">字段可空</span>
+              </div>
+            </div>
+
+            <div className="min-h-0 overflow-y-auto bg-[#fbf8f2] p-3">
+              {creditBlocked && (
+                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                  <p className="font-black">积分不足，暂时不能继续提问</p>
+                  <button type="button" onClick={onOpenCredits} className="mt-2 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-black text-white hover:bg-red-600">去积分中心</button>
+                </div>
+              )}
+              {messagesLoading && <div className="py-16 text-center text-sm text-stone-400">加载中...</div>}
+              {messagesError && <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">消息加载失败，请返回重试。</div>}
+              {!messagesLoading && !messagesError && messages.length === 0 && !sending && (
+                <div className="flex h-full min-h-[420px] flex-col">
+                  <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-[#eadfce] bg-white/55 px-6 py-10">
+                    <div className="max-w-md text-center">
+                      <p className="text-[13px] font-semibold text-stone-500">工作区空白</p>
+                      <p className="mt-2 text-xs leading-6 text-stone-400">{structuredEmptyHint}</p>
+                      <div className="mt-5 flex flex-wrap justify-center gap-2">
+                        {structuredQuestions.map(question => (
+                          <button key={question} type="button" onClick={() => sendText(question)} className="rounded-full border border-[#eadfce] bg-white/80 px-3 py-1.5 text-[11px] font-semibold text-stone-500 transition hover:border-[#d8c5aa] hover:text-stone-700">
+                            {question}
+                          </button>
+                        ))}
+                      </div>
+                      <button onClick={() => sendText(structuredWorkflow.prompt)} disabled={sending} className="mt-4 rounded-full bg-[#2f251d] px-4 py-2 text-xs font-semibold text-white shadow-sm disabled:opacity-40">
+                        {structuredWorkflow.button}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {messages.map(msg => {
+                const isUser = msg.role === 'user';
+                return (
+                  <div key={msg.id} className={`mb-4 flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-6 shadow-sm ${isUser ? 'rounded-br-sm bg-[#2f251d] text-white' : 'rounded-bl-sm border border-[#eadfce] bg-white text-stone-800'}`}>
+                      <MessageText content={msg.content} dark={isUser} />
+                      <AttachmentList attachments={msg.attachments} dark={isUser} />
+                      {!isUser && (
+                        <div className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3">
+                          <button onClick={() => { navigator.clipboard.writeText(msg.content); showToast('已复制', 'info'); }} className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-black text-stone-600 transition hover:bg-white">
+                            复制
+                          </button>
+                          <button onClick={() => downloadWordDocument(conversationTitle || structuredWorkflow.title || 'AI 回答', msg.content)} className="rounded-lg border border-[#eadfce] bg-[#fbf6ee] px-3 py-1.5 text-xs font-black text-[#7a4c2c] transition hover:bg-white">
+                            下载 Word
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {streamingContent && (
+                <div className="mb-4 flex justify-start">
+                  <div className="max-w-[88%] rounded-2xl rounded-bl-sm border border-[#eadfce] bg-white px-3.5 py-2.5 text-[13px] leading-6 text-stone-800 shadow-sm">
+                    <MessageText content={streamingContent} />
+                    <span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-[#8a5a35] align-middle" />
+                  </div>
+                </div>
+              )}
+              <div ref={bottomRef} />
+            </div>
+
+            <div className="border-t border-stone-200 bg-white p-2.5">
+              <input ref={fileInputRef} type="file" multiple accept=".pdf,.txt,.md,.doc,.docx" onChange={event => chooseFiles(event.target.files)} className="hidden" />
+              <div className="flex gap-2">
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-stone-300 bg-white text-lg text-stone-700 shadow-sm transition hover:border-[#8a5a35] hover:text-[#8a5a35] disabled:opacity-40" title="上传附件">
+                  +
+                </button>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={input}
+                  onChange={event => setInput(event.target.value)}
+                  onKeyDown={event => event.key === 'Enter' && sendText(input)}
+                  placeholder={sending ? '等待 AI 回复中...' : '补充要求，也可以只发附件'}
+                  className="min-w-0 flex-1 rounded-xl border border-stone-300 bg-white px-3 py-2 text-[13px] text-stone-900 outline-none placeholder:text-stone-400 focus:border-[#8a5a35] focus:ring-1 focus:ring-[#8a5a35]/20"
+                />
+                <button onClick={() => sendText(structuredWorkflow.prompt)} disabled={sending} className="shrink-0 rounded-xl bg-[#2f251d] px-4 py-2 text-[13px] font-semibold text-white shadow transition hover:bg-[#4a3728] disabled:opacity-40">
+                  {structuredWorkflow.button}
                 </button>
                 <button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-stone-900 text-white shadow transition hover:bg-stone-800 disabled:opacity-40" title="发送补充">
                   →
@@ -872,29 +1650,29 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
                 <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-3">
                   <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full rounded-2xl border border-dashed border-[#d8c5aa] bg-white px-3 py-3 text-left transition hover:bg-[#fffdf8]">
                     <span className="block text-[13px] font-semibold text-stone-950">添加材料</span>
-                    <span className="mt-1 block text-xs leading-5 text-stone-500">作文、教案、讲义、说课稿、素材包</span>
+                    <span className="mt-1 block text-xs leading-5 text-stone-500">{isYejiaying ? '诗词原文、注释、讲稿、板书、课堂要求' : isWangrongsheng ? '课文、单元导语、课后题、教案、活动设计' : '作文、教案、讲义、说课稿、素材包'}</span>
                   </button>
                   <div className="rounded-2xl border border-[#eadfce] bg-white p-3">
                     <p className="text-xs font-semibold text-[#8a5a35]">本次材料</p>
                     <p className="mt-2 text-xs leading-5 text-stone-600">{workbench.material ? '已填写材料内容，发送后将作为核心依据。' : '还没有粘贴材料，可直接上传文件或在下方输入。'}</p>
                   </div>
                   <label className="block rounded-2xl border border-[#eadfce] bg-white p-3">
-                    <span className="mb-2 block text-xs font-semibold text-stone-700">{teacherWorkflow.materialLabel}</span>
+                    <span className="mb-2 block text-xs font-semibold text-stone-700">{structuredWorkflow.materialLabel}</span>
                     <textarea
                       value={workbench.material}
                       onChange={event => updateWorkbenchValue('material', event.target.value)}
-                      placeholder={teacherWorkflow.materialPlaceholder}
+                      placeholder={structuredWorkflow.materialPlaceholder}
                       rows={5}
                       className="w-full resize-none rounded-xl border border-[#eadfce] bg-[#fffdf8] px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]"
                     />
                   </label>
                   <label className="block rounded-2xl border border-[#eadfce] bg-white p-3">
-                    <span className="mb-2 block text-xs font-semibold text-stone-700">{teacherWorkflow.directionLabel}</span>
-                    <input value={workbench.goal} onChange={event => updateWorkbenchValue('goal', event.target.value)} placeholder={teacherWorkflow.directionPlaceholder} className="h-9 w-full rounded-xl border border-[#eadfce] bg-[#fffdf8] px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" />
+                    <span className="mb-2 block text-xs font-semibold text-stone-700">{structuredWorkflow.directionLabel}</span>
+                    <input value={workbench.goal} onChange={event => updateWorkbenchValue('goal', event.target.value)} placeholder={structuredWorkflow.directionPlaceholder} className="h-9 w-full rounded-xl border border-[#eadfce] bg-[#fffdf8] px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" />
                   </label>
                   <label className="block rounded-2xl border border-[#eadfce] bg-white p-3">
-                    <span className="mb-2 block text-xs font-semibold text-stone-700">{teacherWorkflow.outputLabel}</span>
-                    <input value={workbench.output} onChange={event => updateWorkbenchValue('output', event.target.value)} placeholder={teacherWorkflow.outputPlaceholder} className="h-9 w-full rounded-xl border border-[#eadfce] bg-[#fffdf8] px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" />
+                    <span className="mb-2 block text-xs font-semibold text-stone-700">{structuredWorkflow.outputLabel}</span>
+                    <input value={workbench.output} onChange={event => updateWorkbenchValue('output', event.target.value)} placeholder={structuredWorkflow.outputPlaceholder} className="h-9 w-full rounded-xl border border-[#eadfce] bg-[#fffdf8] px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" />
                   </label>
                   {pendingFiles.length > 0 && (
                     <div className="rounded-2xl border border-[#eadfce] bg-white p-4">
@@ -1090,7 +1868,7 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
               <div className="rounded-3xl border border-stone-200 bg-white/85 p-5 shadow-sm">
                 <h3 className="text-lg font-black text-stone-900">{isWangdingjun ? '先说要交付什么，或上传资料让鼎公诊改' : isMindfulness ? '可以先做一个很小的安顿' : '可以直接问，也可以先上传材料'}</h3>
                 <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                  {(isWangdingjun ? WANGDINGJUN_QUESTIONS : isMindfulness ? MINDFULNESS_QUESTIONS : QUICK_QUESTIONS).map(question => (
+                  {(isWangdingjun ? WANGDINGJUN_QUESTIONS : isYejiaying ? YEJIAYING_QUESTIONS : isMindfulness ? MINDFULNESS_QUESTIONS : QUICK_QUESTIONS).map(question => (
                     <button key={question} type="button" onClick={() => sendText(question)} className="rounded-2xl border border-stone-200 bg-stone-50 px-3 py-3 text-left text-sm font-semibold leading-5 text-stone-700 transition hover:border-emerald-700 hover:bg-white hover:text-emerald-800">
                       {question}
                     </button>

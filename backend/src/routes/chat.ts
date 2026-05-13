@@ -50,7 +50,7 @@ const upload = multer({
 
 const CONVERSATION_TITLES: Record<string, string> = {
   wangdingjun: '鼎公老师',
-  wangrongsheng: '荣生备课',
+  wangrongsheng: '绒绒老师',
   sunshaozhen: '绍振细读',
   zhangxuefeng: '冰山先生',
   wangzhigang: '战略王子',
@@ -70,7 +70,7 @@ const CONVERSATION_TITLES: Record<string, string> = {
 };
 
 function getConversationTitle(expertId: string, fallback?: string) {
-  return fallback || CONVERSATION_TITLES[expertId] || '外脑对话';
+  return fallback || CONVERSATION_TITLES[expertId] || '智脑对话';
 }
 
 router.use(requireAuth);

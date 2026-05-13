@@ -1,9 +1,12 @@
 export const FEATURED_EXPERT_ORDER = [
   'wangdingjun',
+  'wangrongsheng',
+  'sunshaozhen',
+  'yejiaying',
   'zhangxuefeng',
   'wangzhigang',
   'steve-jobs',
-  'luoxiang',
+  'kuangtuzhangsan',
   'yemaozhong',
   'luoyonghao',
   'fandeng',
@@ -13,7 +16,7 @@ export const FEATURED_EXPERT_ORDER = [
   'xuehuashi',
   'zhanqimin',
   'li-meijin',
-  'thich-nhat-hanh',
+  'yixingchanshi',
 ] as const;
 
 export interface ExpertDisplayMeta {
@@ -41,6 +44,44 @@ export const EXPERT_DISPLAY: Record<string, ExpertDisplayMeta> = {
     accent: 'emerald',
     soft: 'bg-emerald-50',
     avatar: '/experts/wangdingjun.png',
+  },
+  wangrongsheng: {
+    name: '绒绒老师',
+    alias: '绒绒老师',
+    title: '语文教学内容与课堂设计判断',
+    cardIntro: '先钉教什么，再判活动服不服。',
+    shortTitle: '教学内容',
+    tagline: '教案、说课稿、逐字稿与目标—活动—评价一致性',
+    promise:
+      '服务一线语文老师与教研组：先判断单篇与单元的教学内容取舍，再生成教案、说课稿、逐字稿和评课诊断；学生作文升格请用鼎公，文学细读主链请用绍振细读。',
+    accent: 'teal',
+    soft: 'bg-teal-50',
+    avatar: '/experts/wangrongsheng.svg',
+  },
+  sunshaozhen: {
+    name: '绍振细读',
+    alias: '绍振细读',
+    title: '文学类文本细读与阅读教学',
+    cardIntro: '抓文本矛盾，搭主问题链，给能上的板书。',
+    shortTitle: '阅读细读',
+    tagline: '现代文与文学类课文：细读、层进讲读与阅读题文学逻辑',
+    promise: '帮老师把一篇课文读深一层、讲清一层：主问题链、板书层进、学生可执行任务；不冒充阅卷标准，作文升格请找鼎公工作台。',
+    accent: 'violet',
+    soft: 'bg-violet-50',
+    avatar: '/experts/sunshaozhen.svg',
+  },
+  yejiaying: {
+    name: '迦陵先生',
+    alias: '迦陵先生',
+    title: '古典诗词讲读与鉴赏',
+    cardIntro: '诵读入情，意象与典故点到为止，主问题能上课。',
+    shortTitle: '诗词讲读',
+    tagline: '古诗与词：声情、兴发感动、章法与用典提示',
+    promise:
+      '服务语文老师拓展课与自学带读：单首或组诗层次讲读、诵读与声情、意象脉络、典故可查方向、课堂主问题链；不做作文批改与现代文赋分模板。',
+    accent: 'stone',
+    soft: 'bg-[#fffaf2]',
+    avatar: '/experts/yejiaying.svg',
   },
   zhangxuefeng: {
     name: '冰山先生',
@@ -78,17 +119,17 @@ export const EXPERT_DISPLAY: Record<string, ExpertDisplayMeta> = {
     soft: 'bg-zinc-50',
     avatar: '/experts/steve-jobs.png',
   },
-  luoxiang: {
+  kuangtuzhangsan: {
     name: '狂徒张三',
     alias: '狂徒张三',
-    title: '风险边界判断',
-    cardIntro: '嘴快逻辑稳，专拆风险。',
-    shortTitle: '法律边界',
-    tagline: '事实梳理、风险边界和合规判断',
-    promise: '先分清事实、证据和角色，再告诉你哪些能做、哪些慎做、哪些别碰。',
+    title: '先别踩坑',
+    cardIntro: '嘴快逻辑稳，专帮你避坑。',
+    shortTitle: '法律避坑',
+    tagline: '把事实、证据和风险说清楚，告诉你哪些能做、哪些慎做、哪些别碰',
+    promise: '你把事情讲清楚，我帮你拆出风险、证据缺口和更稳妥的做法。',
     accent: 'blue',
     soft: 'bg-blue-50',
-    avatar: '/experts/luoxiang.svg',
+    avatar: '/experts/kuangtuzhangsan.svg',
   },
   yemaozhong: {
     name: '叶将军',
@@ -186,17 +227,17 @@ export const EXPERT_DISPLAY: Record<string, ExpertDisplayMeta> = {
     soft: 'bg-rose-50',
     avatar: '/experts/li-meijin.svg',
   },
-  'thich-nhat-hanh': {
+  'yixingchanshi': {
     name: '一行禅师',
     alias: '一行禅师',
-    title: '正念舒缓判断',
-    cardIntro: '温柔、安静，先回到呼吸。',
+    title: '情绪安顿与高情商回应',
+    cardIntro: '温柔、安静，先接住情绪。',
     shortTitle: '正念支持',
-    tagline: '呼吸练习、情绪安顿和当下觉察',
-    promise: '把焦虑、压力和混乱先安顿下来，再给今天就能做的小练习。',
+    tagline: '呼吸练习、情绪安顿、安慰话术和关系降温',
+    promise: '把焦虑、压力和混乱先安顿下来，再给温柔但有边界的回应方式。',
     accent: 'indigo',
     soft: 'bg-indigo-50',
-    avatar: '/experts/thich-nhat-hanh.svg',
+    avatar: '/experts/yixingchanshi.svg',
   },
   zhanqimin: {
     name: '肠博士',
@@ -214,8 +255,8 @@ export const EXPERT_DISPLAY: Record<string, ExpertDisplayMeta> = {
 
 export function getExpertDisplay(id: string): ExpertDisplayMeta {
   return EXPERT_DISPLAY[id] || {
-    name: '通用方法卡',
-    alias: '通用方法卡',
+    name: '通用智脑',
+    alias: '通用智脑',
     title: '专业判断辅助',
     cardIntro: '先追问关键变量，再把模糊问题整理成可执行判断。',
     shortTitle: '专业判断',

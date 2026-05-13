@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { countPersonaSkillLines, loadPersonaSkill, MIN_READY_SKILL_LINES } from '../services/personas';
+import { countPersonaSkillLines, getPersonaStatus, loadPersonaSkill, MIN_READY_SKILL_LINES } from '../services/personas';
 
 const router = Router();
 
@@ -26,11 +26,32 @@ const experts: Expert[] = [
     status: 'ready',
   },
   {
+    id: 'sunshaozhen',
+    name: '绍振细读',
+    alias: '绍振细读',
+    avatar: '/experts/sunshaozhen.svg',
+    description: '文学类文本细读与阅读教学工作台：层次阐释、讲读主问题链、板书层进与阅读题文学逻辑（不冒充官方阅卷标准）。',
+    tagline: '把一篇课文读深一层、讲清一层',
+    expertise: ['文本细读', '阅读教学设计', '课堂主问题', '文学类课文', '教研讲读'],
+    status: 'ready',
+  },
+  {
+    id: 'wangrongsheng',
+    name: '绒绒老师',
+    alias: '绒绒老师',
+    avatar: '/experts/wangrongsheng.svg',
+    description:
+      '语文教学内容与课堂设计判断智脑：帮老师判断这一课教什么、不教什么，检查目标—内容—活动—评价是否一致；不主全文作文升格、不主纯文学审美独白。',
+    tagline: '先钉这一课教什么，再判活动服不服',
+    expertise: ['教学内容', '教案生成', '说课稿', '逐字稿', '评课诊断', '课型取舍'],
+    status: 'ready',
+  },
+  {
     id: 'zhangxuefeng',
     name: '冰山先生',
     alias: '冰山先生',
     avatar: '/experts/zhangxuefeng.png',
-    description: '升学、专业选择和就业路径判断专家，擅长把家庭条件与现实回报放到同一张图里看。',
+    description: '升学、专业选择和就业路径判断智脑，擅长把家庭条件与现实回报放到同一张图里看。',
     tagline: '升学路径、专业选择和就业结果判断',
     expertise: ['教育规划', '职业规划', '考研指导', '高考志愿'],
     status: 'ready',
@@ -56,13 +77,13 @@ const experts: Expert[] = [
     status: 'ready',
   },
   {
-    id: 'luoxiang',
+    id: 'kuangtuzhangsan',
     name: '狂徒张三',
     alias: '狂徒张三',
-    avatar: '/experts/luoxiang.svg',
-    description: '法律与边界感极强的卡通锣鼓形象，嘴快但逻辑稳，专拆事实、证据和风险。',
-    tagline: '事实梳理、风险边界和合规判断',
-    expertise: ['刑法学', '法治思想', '道德哲学', '社会正义'],
+    avatar: '/experts/kuangtuzhangsan.svg',
+    description: '嘴快逻辑稳，帮你先看事实、证据和最容易踩的坑。',
+    tagline: '把事情讲清楚，判断哪些能做、哪些慎做、哪些别碰',
+    expertise: ['法律避坑', '证据梳理', '合同风险', '公开发言边界'],
     status: 'ready',
   },
   {
@@ -73,6 +94,16 @@ const experts: Expert[] = [
     description: '冲突营销视角，帮助找到消费者心里的矛盾、记忆点和传播钩子。',
     tagline: '品牌冲突、广告钩子和传播记忆点',
     expertise: ['品牌营销', '广告策划', '冲突营销', '市场定位'],
+    status: 'ready',
+  },
+  {
+    id: 'yejiaying',
+    name: '迦陵先生',
+    alias: '迦陵先生',
+    avatar: '/experts/yejiaying.svg',
+    description: '古典诗词讲读与鉴赏智脑：诵读声情、兴发感动、意象与典故提示、课堂主问题链；不做作文主台与现代文赋分模板。',
+    tagline: '把古诗与词读深一层、讲清楚一层',
+    expertise: ['古诗带读', '词学入门', '意象章法', '典故互文', '诵读与声情', '社团课设计'],
     status: 'ready',
   },
   {
@@ -140,19 +171,19 @@ const experts: Expert[] = [
     name: '李玫瑾',
     alias: '李玫瑾',
     avatar: '/experts/li-meijin.svg',
-    description: '家庭教育与犯罪心理判断外脑，围绕心理抚养、早年养育和未成年成长边界给出判断。',
+    description: '家庭教育与犯罪心理判断智脑，围绕心理抚养、早年养育和未成年成长边界给出判断。',
     tagline: '心理抚养、成长边界和家庭教育判断',
     expertise: ['心理抚养', '家庭教育', '青少年成长', '犯罪预防'],
     status: 'ready',
   },
   {
-    id: 'thich-nhat-hanh',
+    id: 'yixingchanshi',
     name: '一行禅师',
     alias: '一行禅师',
-    avatar: '/experts/thich-nhat-hanh.svg',
-    description: '正念与情绪舒缓外脑，帮助用户把压力、焦虑和混乱先安顿回呼吸和当下。',
-    tagline: '正念练习、呼吸安顿和情绪回到当下',
-    expertise: ['正念呼吸', '情绪安顿', '步行禅', '压力舒缓'],
+    avatar: '/experts/yixingchanshi.svg',
+    description: '正念舒缓与高情商回应智脑，帮助用户把压力、焦虑和关系冲突先安顿回呼吸和温和边界。',
+    tagline: '呼吸练习、情绪安顿、安慰话术和关系降温',
+    expertise: ['正念呼吸', '情绪安顿', '安慰话术', '关系修复'],
     status: 'ready',
   },
   {
@@ -160,7 +191,7 @@ const experts: Expert[] = [
     name: '肠博士',
     alias: '肠博士',
     avatar: '/experts/zhanqimin.svg',
-    description: '肠道健康判断外脑，适合症状梳理、检查沟通和长期调理边界。',
+    description: '肠道健康判断智脑，适合症状梳理、检查沟通和长期调理边界。',
     tagline: '肠道健康、检查沟通和长期调理判断',
     expertise: ['肠道健康', '症状梳理', '检查沟通', '长期调理'],
     status: 'ready',
@@ -179,7 +210,7 @@ function serializeExpert(expert: Expert) {
   const skillLines = skillLineCache.get(expert.id) ?? 0;
   return {
     ...expert,
-    status: skillLines >= MIN_READY_SKILL_LINES ? 'ready' : 'pending',
+    status: getPersonaStatus(expert.id),
     has_skill: skillCache.get(expert.id) !== null,
     skill_lines: skillLines,
     min_ready_skill_lines: MIN_READY_SKILL_LINES,
