@@ -310,6 +310,51 @@ export function buildSystemPrompt(expertId: string, userTurnCount = 1): string {
   ].join('\n\n');
 }
 
+function selectDeepSeekModel(
+  expertId: string,
+  userMessage: string,
+  history: { role: 'user' | 'assistant'; content: string }[],
+): 'deepseek-chat' | 'deepseek-reasoner' {
+  if (expertId !== 'kuangtuzhangsan') return 'deepseek-chat';
+
+  const text = `${userMessage}\n${history.slice(-6).map(item => item.content).join('\n')}`;
+  const complexSignals = [
+    '刑事',
+    '报案',
+    '传唤',
+    '取保',
+    '拘留',
+    '立案',
+    '保全',
+    '查封',
+    '冻结',
+    '继承',
+    '遗嘱',
+    '离婚',
+    '抚养权',
+    '共同财产',
+    '多方主体',
+    '管辖',
+    '上诉',
+    '二审',
+    '再审',
+    '执行',
+    '伤残鉴定',
+    '重大合同',
+    '跨境',
+    '未成年人',
+    '医疗',
+    '行政处罚',
+    '已起诉',
+    '收到起诉材料',
+  ];
+
+  const userTurns = history.filter(item => item.role === 'user').length + 1;
+  if (userTurns >= 3) return 'deepseek-reasoner';
+  if (complexSignals.some(signal => text.includes(signal))) return 'deepseek-reasoner';
+  return 'deepseek-chat';
+}
+
 export async function generateReply(
   expertId: string,
   userMessage: string,
@@ -322,8 +367,9 @@ export async function generateReply(
     { role: 'user', content: userMessage },
   ];
 
+  const model = selectDeepSeekModel(expertId, userMessage, history);
   const response = await getDeepSeekClient().chat.completions.create({
-    model: 'deepseek-chat',
+    model,
     messages,
     temperature: 0.55,
     max_tokens: 2048,
@@ -344,8 +390,9 @@ export async function* generateReplyStream(
     { role: 'user', content: userMessage },
   ];
 
+  const model = selectDeepSeekModel(expertId, userMessage, history);
   const stream = await getDeepSeekClient().chat.completions.create({
-    model: 'deepseek-chat',
+    model,
     messages,
     temperature: 0.55,
     max_tokens: 2048,

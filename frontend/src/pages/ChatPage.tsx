@@ -6,6 +6,7 @@ import remarkMath from 'remark-math';
 import { getConversation, getMessages, sendMessageStream, uploadAttachments, type Attachment } from '../services/api';
 import { showToast } from '../components/toastStore';
 import { getExpertDisplay } from '../data/experts';
+import { DEFAULT_KUANGTUZHANGSAN_TASK, KUANGTUZHANGSAN_TASKS, getKuangtuzhangSanTask, type KuangtuzhangSanTaskId } from '../data/kuangtuzhangSanTasks';
 
 interface Message {
   id: string;
@@ -89,6 +90,16 @@ const YEJIAYING_QUESTIONS = [
   '请把这首词整理成一节可上课的主问题链。',
   '请说明这组诗词的意象脉络和兴发感动。',
   '请给这首诗词的典故查检方向，不要泛泛堆知识。',
+];
+
+const PRECONSULT_OUTPUT_STRUCTURE = [
+  '初步判断',
+  '事实与程序进展',
+  '证据清单',
+  '风险边界',
+  '下一步处理路径',
+  '可提交材料或沟通文本',
+  '专业确认清单',
 ];
 
 type TeacherBoardId = 'correction' | 'preparation';
@@ -800,7 +811,9 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
   const [activeRongshengWorkflow, setActiveRongshengWorkflow] = useState<RongshengWorkflowId>('content-decision');
   const [activePoetryBoard, setActivePoetryBoard] = useState<PoetryBoardId>('lesson');
   const [activePoetryWorkflow, setActivePoetryWorkflow] = useState<PoetryWorkflowId>('lesson-plan');
+  const [activePreconsultTask, setActivePreconsultTask] = useState<KuangtuzhangSanTaskId>(DEFAULT_KUANGTUZHANGSAN_TASK);
   const [teacherLibraryOpen, setTeacherLibraryOpen] = useState(true);
+  const [preconsultLibraryOpen, setPreconsultLibraryOpen] = useState(true);
 
   const activeExpertId = conversationExpert.conversationId === conversationId ? conversationExpert.expertId : expertId;
   const [workbenchState, setWorkbenchState] = useState(() => ({
@@ -814,12 +827,14 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
   const isWangdingjun = activeExpertId === 'wangdingjun';
   const isWangrongsheng = activeExpertId === 'wangrongsheng';
   const isYejiaying = activeExpertId === 'yejiaying';
+  const isPreconsult = activeExpertId === 'kuangtuzhangsan';
   const isStructuredTeacher = isWangdingjun || isWangrongsheng || isYejiaying;
   const workbenchCopy = useMemo(() => getWorkbenchCopy(activeExpertId), [activeExpertId]);
   const workbench = workbenchState.expertId === activeExpertId ? workbenchState.values : getInitialWorkbench(activeExpertId);
   const teacherWorkflow = TEACHER_WORKFLOWS[activeTeacherWorkflow];
   const rongshengWorkflow = RONGSHENG_WORKFLOWS[activeRongshengWorkflow];
   const poetryWorkflow = POETRY_WORKFLOWS[activePoetryWorkflow];
+  const preconsultTask = getKuangtuzhangSanTask(activePreconsultTask);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const streamingRef = useRef('');
@@ -1032,6 +1047,40 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
       ].join('\n');
     }
 
+    if (isPreconsult) {
+      return [
+        text.trim(),
+        '',
+        `【法律预咨询工作台 · ${preconsultTask.label}】`,
+        `任务定位：${preconsultTask.headline}`,
+        `场景说明：${preconsultTask.description}`,
+        `咨询者身份：${workbench.clientName || '未填写'}`,
+        `对方身份/关系：${workbench.clientBackground || '未填写'}`,
+        `地区/管辖线索：${workbench.region || '未填写'}`,
+        `事件进展：${workbench.materialType || '未填写'}`,
+        `事实经过/时间线：${workbench.background || '未填写'}`,
+        `已有证据/材料：${workbench.material || '未填写'}`,
+        `当前诉求/拟采取行动：${workbench.goal || '未填写'}`,
+        `希望产出：${workbench.output || preconsultTask.resultHint}`,
+        '模型路由建议：先由 deepseek-chat 负责信息收集、初步分类和一般预咨询；如果事实复杂、争议金额高、涉及刑事/保全/继承/婚姻家事/多方主体/多轮追问仍无法判断，应升级 deepseek-reasoner 做结构化推理。',
+        '',
+        '【本次必须交付】',
+        ...PRECONSULT_OUTPUT_STRUCTURE.map((item, index) => `${index + 1}. ${item}`),
+        '',
+        '【当前事项的整理重点】',
+        ...preconsultTask.outputStructure.map((item, index) => `${index + 1}. ${item}`),
+        '',
+        '【产品定位】',
+        '这是法律预咨询工作台。目标不是替代律师出具正式法律意见，而是在正式咨询、仲裁、投诉、平台申诉、协商沟通之前，把事实、证据、风险边界、处理顺序和可复制材料整理成可交付材料。',
+        '',
+        '【工作要求】',
+        '语言必须专业、克制、客观，不使用行业黑话、段子化表达或情绪化措辞。不要只做免责声明。必须先把用户的叙事整理成可执行材料；信息不足时优先追问关键事实，最多追问 3 个问题；如果已有信息足够，直接给假设版判断，并标明哪些结论会随事实变化。遇到高风险事项，不只说“找律师”，还要列出带什么材料去、问什么问题、当前先暂停什么事项。',
+        '',
+        '【边界要求】',
+        '只做一般风险梳理、证据整理、材料准备、沟通文本和渠道建议；不冒充律师、法院、监管部门或任何官方机构；不承诺结果；不教规避法律、伪造证据、威胁、网暴、泄露隐私或恶意投诉。涉及刑事、行政处罚、重大合同、婚姻家事、未成年人、医疗、隐私泄露、跨境事项时，必须列出专业确认清单。',
+      ].join('\n');
+    }
+
     if (isMindfulness) {
       return [
         text.trim(),
@@ -1147,6 +1196,58 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
       },
     );
   };
+
+  if (isPreconsult) {
+    return (
+      <div className="flex h-screen flex-col overflow-hidden bg-[#f5f1e8] text-[#211f1b]">
+        <header className="shrink-0 border-b border-[#ded4c4] bg-[#fffaf0]/88 px-4 py-2.5 shadow-[0_1px_18px_rgba(64,48,28,0.06)] backdrop-blur-xl">
+          <div className="mx-auto flex max-w-[1440px] items-center gap-3">
+            <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded-lg border border-[#d8cdbb] bg-white/85 text-lg text-stone-600 shadow-sm transition hover:bg-white" title="返回">←</button>
+            <button onClick={onOpenHome} className="rounded-lg border border-[#d8cdbb] bg-white/85 px-3.5 py-2 text-xs font-semibold text-stone-700 shadow-sm transition hover:bg-white">首页</button>
+            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-[#d8cdbb] bg-[#efe6d6]"><img src={meta.avatar} alt={meta.alias} className="h-full w-full object-cover" onError={event => { event.currentTarget.style.display = 'none'; }} /></div>
+            <div className="min-w-0 flex-1"><h1 className="truncate text-base font-semibold text-[#211f1b]">狂徒张三法律预咨询工作台</h1><p className="truncate text-xs text-stone-500">整理事实、证据、程序进展和可提交材料。</p></div>
+            <button onClick={() => setPreconsultLibraryOpen(prev => !prev)} className="rounded-lg border border-[#d8cdbb] bg-white/85 px-3.5 py-2 text-xs font-semibold text-stone-600 shadow-sm transition hover:bg-white">{preconsultLibraryOpen ? '收起材料库' : '展开材料库'}</button>
+            <button onClick={onOpenCredits} className="rounded-lg border border-[#d8cdbb] bg-white/85 px-3.5 py-2 text-xs font-semibold text-stone-600 shadow-sm">积分</button>
+          </div>
+        </header>
+        <main className={`mx-auto grid min-h-0 w-full max-w-[1440px] flex-1 gap-3 p-3 transition-[grid-template-columns] duration-300 ${preconsultLibraryOpen ? 'grid-cols-[304px_minmax(0,1fr)_316px]' : 'grid-cols-[304px_minmax(0,1fr)_52px]'}`}>
+          <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-[#d8cdbb] bg-[#fffaf0]/88 shadow-[0_14px_34px_rgba(64,48,28,0.06)]">
+            <div className="border-b border-[#e4dacb] p-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a6b38]">热门咨询</p><h2 className="mt-1 text-[15px] font-semibold text-[#211f1b]">咨询事项</h2><p className="mt-1 text-xs leading-5 text-stone-500">{preconsultTask.headline}</p></div>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+              {KUANGTUZHANGSAN_TASKS.map(task => {
+                const active = task.id === activePreconsultTask;
+                return (
+                  <button key={task.id} type="button" onClick={() => { setActivePreconsultTask(task.id); updateWorkbenchValue('output', task.resultHint); }} className={`w-full rounded-lg border px-3 py-2.5 text-left transition ${active ? 'border-[#2b2721] bg-[#2b2721] text-white shadow-sm' : 'border-[#e3d8c7] bg-white text-stone-800 hover:border-[#cdbda6] hover:bg-[#fffdf8]'}`}>
+                    <span className="block text-[13px] font-semibold leading-5">{task.label}</span>
+                    <span className={`mt-0.5 block whitespace-normal break-words text-[11px] leading-4 ${active ? 'text-white/68' : 'text-stone-500'}`}>{task.headline}</span>
+                    {active && <span className="mt-2 block text-[11px] leading-5 text-white/72">{task.description}</span>}
+                  </button>
+                );
+              })}
+              <div className="rounded-lg border border-[#e3d8c7] bg-white p-3"><p className="text-xs font-semibold text-[#7d5b25]">常见提问</p><div className="mt-2 grid gap-1.5">{preconsultTask.quickQuestions.map(question => (<button key={question} type="button" onClick={() => sendText(question)} className="rounded-md bg-[#f6f0e6] px-2.5 py-2 text-left text-[11px] leading-4 text-stone-600 transition hover:bg-[#efe3d0] hover:text-stone-900">{question}</button>))}</div></div>
+              <div className="rounded-lg border border-[#ead8b7] bg-[#fff7e6] p-3 text-xs leading-5 text-[#7d5b25]"><p className="font-semibold text-[#5f4218]">预计整理内容</p><p className="mt-1">{preconsultTask.resultHint}</p></div>
+            </div>
+          </aside>
+          <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-[#d8cdbb] bg-white shadow-[0_14px_34px_rgba(64,48,28,0.06)]">
+            <div className="border-b border-[#e4dacb] bg-white p-4"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="text-[11px] font-semibold text-[#8a6b38]">法律预咨询 / {preconsultTask.label}</p><h2 className="mt-1 text-lg font-semibold text-[#211f1b]">{preconsultTask.headline}</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-stone-500">{preconsultTask.description}</p></div><div className="flex shrink-0 gap-1.5 text-[11px] font-semibold"><span className="rounded-md bg-[#f5e2df] px-2.5 py-1 text-[#8d2f24]">高风险</span><span className="rounded-md bg-[#fff1ce] px-2.5 py-1 text-[#8a5f12]">需核实</span><span className="rounded-md bg-[#ece7de] px-2.5 py-1 text-stone-600">需留痕</span></div></div></div>
+            <div className="min-h-0 overflow-y-auto bg-[#faf7ef] p-3">
+              {creditBlocked && (<div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"><p className="font-semibold">积分不足，暂时不能继续提问</p><button type="button" onClick={onOpenCredits} className="mt-2 rounded-md bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600">去积分中心</button></div>)}
+              {messagesLoading && <div className="py-16 text-center text-sm text-stone-400">加载中...</div>}
+              {messagesError && <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">消息加载失败，请返回重试。</div>}
+              {!messagesLoading && !messagesError && messages.length === 0 && !sending && (<div className="flex h-full min-h-[420px] items-center justify-center rounded-lg border border-dashed border-[#d8cdbb] bg-white/58 px-6 py-10"><div className="max-w-md text-center"><p className="text-[13px] font-semibold text-stone-500">等待咨询信息</p><p className="mt-2 text-xs leading-6 text-stone-400">先填写右侧基础信息；信息不足时会继续追问，信息足够时会直接整理事实、证据、风险边界和处理路径。</p><button onClick={() => sendText(`请围绕${preconsultTask.label}事项整理一次法律预咨询。`)} disabled={sending} className="mt-5 rounded-md bg-[#2b2721] px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#44392d] disabled:opacity-40">整理咨询材料</button></div></div>)}
+              {messages.map(msg => { const isUser = msg.role === 'user'; return (<div key={msg.id} className={`mb-4 flex ${isUser ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[88%] rounded-lg px-3.5 py-2.5 text-[13px] leading-6 shadow-sm ${isUser ? 'rounded-br-sm bg-[#2b2721] text-white' : 'rounded-bl-sm border border-[#e1d6c5] bg-white text-stone-800'}`}><MessageText content={msg.content} dark={isUser} /><AttachmentList attachments={msg.attachments} dark={isUser} />{!isUser && (<div className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3"><button onClick={() => { navigator.clipboard.writeText(msg.content); showToast('已复制', 'info'); }} className="rounded-md border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:bg-white">复制</button><button onClick={() => downloadWordDocument(conversationTitle || `${preconsultTask.label}预咨询材料`, msg.content)} className="rounded-md border border-[#ead8b7] bg-[#fff7e6] px-3 py-1.5 text-xs font-semibold text-[#7d5b25] transition hover:bg-white">下载 Word</button></div>)}</div></div>); })}
+              {streamingContent && (<div className="mb-4 flex justify-start"><div className="max-w-[88%] rounded-lg rounded-bl-sm border border-[#e1d6c5] bg-white px-3.5 py-2.5 text-[13px] leading-6 text-stone-800 shadow-sm"><MessageText content={streamingContent} /><span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-[#8a6b38] align-middle" /></div></div>)}
+              <div ref={bottomRef} />
+            </div>
+            <div className="border-t border-[#e4dacb] bg-white p-2.5"><input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.txt,.md,.doc,.docx" onChange={event => chooseFiles(event.target.files)} className="hidden" />{pendingFiles.length > 0 && (<div className="mb-2 flex flex-wrap gap-2">{pendingFiles.map((file, index) => (<div key={`${file.name}-${index}`} className="flex max-w-full items-center gap-2 rounded-md border border-[#e1d6c5] bg-[#faf7ef] px-2.5 py-1.5 text-xs text-stone-700"><span className="max-w-48 truncate font-semibold">{file.name}</span><button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="移除">x</button></div>))}</div>)}<div className="flex gap-2"><button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-[#d8cdbb] bg-white text-lg text-stone-700 shadow-sm transition hover:border-[#8a6b38] hover:text-[#7d5b25] disabled:opacity-40" title="上传附件">+</button><input ref={inputRef} type="text" value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => event.key === 'Enter' && sendText(input)} placeholder={sending ? '正在整理...' : '补充事实、证据或当前诉求'} className="min-w-0 flex-1 rounded-md border border-[#d8cdbb] bg-white px-3 py-2 text-[13px] text-stone-900 outline-none placeholder:text-stone-400 focus:border-[#8a6b38] focus:ring-1 focus:ring-[#8a6b38]/20" /><button onClick={() => sendText(`请围绕${preconsultTask.label}事项整理一次法律预咨询。`)} disabled={sending} className="shrink-0 rounded-md bg-[#2b2721] px-4 py-2 text-[13px] font-semibold text-white shadow transition hover:bg-[#44392d] disabled:opacity-40">整理材料</button><button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-stone-900 text-white shadow transition hover:bg-stone-800 disabled:opacity-40" title="发送补充">→</button></div></div>
+          </section>
+          <aside className="min-h-0 overflow-hidden rounded-lg border border-[#d8cdbb] bg-[#fffaf0]/88 shadow-[0_14px_34px_rgba(64,48,28,0.06)]">
+            {preconsultLibraryOpen ? (<div className="flex h-full min-h-0 flex-col"><div className="flex items-center justify-between border-b border-[#e4dacb] p-3"><div><p className="text-[13px] font-semibold text-[#211f1b]">咨询信息</p><p className="text-xs text-stone-500">身份、进展、事实、证据</p></div><button type="button" onClick={() => setPreconsultLibraryOpen(false)} className="rounded-md border border-[#d8cdbb] bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-600">收起</button></div><div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-3"><button type="button" onClick={() => fileInputRef.current?.click()} className="w-full rounded-lg border border-dashed border-[#cdbda6] bg-white px-3 py-3 text-left transition hover:bg-[#fffdf8]"><span className="block text-[13px] font-semibold text-[#211f1b]">添加材料附件</span><span className="mt-1 block text-xs leading-5 text-stone-500">截图、合同、聊天、工单、录屏、PDF、Word 都可以先放进来。</span></button><label className="block rounded-lg border border-[#e3d8c7] bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">咨询者身份</span><input value={workbench.clientName} onChange={event => updateWorkbenchValue('clientName', event.target.value)} placeholder="例如：员工、消费者、房屋买方、被告、家属、继承人。" className="h-9 w-full rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a6b38]" /></label><label className="block rounded-lg border border-[#e3d8c7] bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">对方身份/关系</span><input value={workbench.clientBackground} onChange={event => updateWorkbenchValue('clientBackground', event.target.value)} placeholder="例如：公司、商家、房东、亲属、平台、交警、公安机关。" className="h-9 w-full rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a6b38]" /></label><div className="grid grid-cols-2 gap-2"><label className="block rounded-lg border border-[#e3d8c7] bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">地区/管辖</span><input value={workbench.region} onChange={event => updateWorkbenchValue('region', event.target.value)} placeholder="城市或地区" className="h-9 w-full rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a6b38]" /></label><label className="block rounded-lg border border-[#e3d8c7] bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">事件进展</span><select value={workbench.materialType} onChange={event => updateWorkbenchValue('materialType', event.target.value)} className="h-9 w-full rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-2 text-xs text-stone-800 outline-none focus:border-[#8a6b38]"><option value="">请选择</option>{['刚发生', '协商中', '收到威胁/催告', '准备起诉', '已起诉', '已收到起诉材料', '准备报案', '已报案/被传唤', '准备保全', '已调解/仲裁中'].map(item => <option key={item} value={item}>{item}</option>)}</select></label></div><label className="block rounded-lg border border-[#e3d8c7] bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">事实经过/时间线</span><textarea value={workbench.background} onChange={event => updateWorkbenchValue('background', event.target.value)} placeholder={preconsultTask.materialPlaceholder} rows={4} className="w-full resize-none rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a6b38]" /></label><label className="block rounded-lg border border-[#e3d8c7] bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">{preconsultTask.materialLabel}</span><textarea value={workbench.material} onChange={event => updateWorkbenchValue('material', event.target.value)} placeholder="把已有证据逐条写下来：证据名称、在谁手里、能证明什么、是否已截图或导出。" rows={5} className="w-full resize-none rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a6b38]" /></label><label className="block rounded-lg border border-[#e3d8c7] bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">{preconsultTask.actionLabel}</span><textarea value={workbench.goal} onChange={event => updateWorkbenchValue('goal', event.target.value)} placeholder={preconsultTask.actionPlaceholder} rows={3} className="w-full resize-none rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a6b38]" /></label><label className="block rounded-lg border border-[#e3d8c7] bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">希望拿到的材料</span><input value={workbench.output} onChange={event => updateWorkbenchValue('output', event.target.value)} placeholder={preconsultTask.resultHint} className="h-9 w-full rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a6b38]" /></label></div></div>) : (<button type="button" onClick={() => setPreconsultLibraryOpen(true)} className="flex h-full w-full items-center justify-center bg-[#fffaf0] text-xs font-semibold text-stone-600 [writing-mode:vertical-rl]">展开咨询信息</button>)}
+          </aside>
+        </main>
+      </div>
+    );
+  }
 
   if (isWangrongsheng) {
     const deliveryWorkflows = RONGSHENG_WORKFLOWS_BY_BOARD.reading.map(id => RONGSHENG_WORKFLOWS[id]);
