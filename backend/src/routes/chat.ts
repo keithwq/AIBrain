@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { Router } from 'express';
 import multer from 'multer';
+import mammoth from 'mammoth';
+import { PDFParse } from 'pdf-parse';
 import { prisma } from '../services/prisma';
 import { generateReplyStream } from '../services/deepseek';
 import { refundCredits, reserveCredits } from '../services/credits';
@@ -48,11 +50,14 @@ const upload = multer({
 
 const CONVERSATION_TITLES: Record<string, string> = {
   wangdingjun: '鼎公老师',
+  wangrongsheng: '荣生备课',
+  sunshaozhen: '绍振细读',
   zhangxuefeng: '冰山先生',
   wangzhigang: '战略王子',
   'steve-jobs': '乔大爷',
-  luoxiang: '狂徒张三',
+  kuangtuzhangsan: '狂徒张三',
   yemaozhong: '叶将军',
+  yejiaying: '迦陵先生',
   luoyonghao: '锤子',
   fandeng: '老登',
   mayun: '太极老总',
@@ -60,7 +65,7 @@ const CONVERSATION_TITLES: Record<string, string> = {
   wentiejun: '铁军教授',
   xuehuashi: '磁医薛博',
   'li-meijin': '李玫瑾',
-  'thich-nhat-hanh': '一行禅师',
+  'yixingchanshi': '一行禅师',
   zhanqimin: '肠博士',
 };
 
@@ -90,16 +95,71 @@ function serializeAttachment(attachment: {
   };
 }
 
-function buildAttachmentContext(attachments: Array<ReturnType<typeof serializeAttachment>>) {
+type AttachmentForContext = {
+  id: string;
+  filename: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+  url: string;
+};
+
+function clipText(value: string, max = 8000) {
+  const normalized = value.replace(/\u0000/g, '').replace(/[ \t]+\n/g, '\n').trim();
+  return normalized.length > max ? `${normalized.slice(0, max)}\n\n[后续内容已截断，请让用户分批上传或粘贴。]` : normalized;
+}
+
+async function extractAttachmentText(attachment: AttachmentForContext): Promise<string> {
+  const filePath = path.join(UPLOAD_DIR, attachment.filename);
+  const ext = path.extname(attachment.originalName).toLowerCase();
+
+  try {
+    if (attachment.mimeType === 'text/plain' || attachment.mimeType === 'text/markdown' || ext === '.txt' || ext === '.md') {
+      return clipText(await fs.promises.readFile(filePath, 'utf8'));
+    }
+
+    if (attachment.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || ext === '.docx') {
+      const result = await mammoth.extractRawText({ path: filePath });
+      return clipText(result.value || '');
+    }
+
+    if (attachment.mimeType === 'application/pdf' || ext === '.pdf') {
+      const parser = new PDFParse({ data: await fs.promises.readFile(filePath) });
+      try {
+        const result = await parser.getText();
+        return clipText(result.text || '');
+      } finally {
+        await parser.destroy();
+      }
+    }
+  } catch (error) {
+    console.warn(`Failed to extract attachment text: ${attachment.originalName}`, error);
+    return '';
+  }
+
+  return '';
+}
+
+async function buildAttachmentContext(attachments: AttachmentForContext[]) {
   if (attachments.length === 0) return '';
+  const textBlocks = await Promise.all(attachments.map(async (item, index) => {
+    const text = await extractAttachmentText(item);
+    if (!text) return `${index + 1}. ${item.originalName}：暂未提取到可读正文。`;
+    return `${index + 1}. ${item.originalName}：\n${text}`;
+  }));
+
   return [
     '',
     '【本次用户上传附件】',
     ...attachments.map((item, index) => {
       const kind = item.mimeType.startsWith('image/') ? '图片' : '文件';
-      return `${index + 1}. ${kind}：${item.name}（${item.mimeType}，${item.url}）`;
+      return `${index + 1}. ${kind}：${item.originalName}（${item.mimeType}，${item.url}）`;
     }),
-    '请结合这些附件判断；如果需要引用图片，可使用 Markdown 图片语法：![说明](图片链接)。公式请用 LaTeX：行内 $...$，独立公式 $$...$$。',
+    '',
+    '【附件正文摘录】',
+    ...textBlocks,
+    '',
+    '这些附件是本次工作流的核心材料之一，请优先阅读附件正文摘录，再结合表单和提问判断。若用户只上传附件也要继续处理；如果附件没有可读正文，请说明无法读取并要求用户粘贴关键内容。公式请用 LaTeX：行内 $...$，独立公式 $$...$$。',
   ].join('\n');
 }
 
@@ -264,7 +324,7 @@ router.post('/conversations/:id/messages/stream', async (req, res) => {
     });
   }
   const serializedAttachments = attachments.map(serializeAttachment);
-  const modelContent = `${userContent || '请查看附件并给出判断。'}${buildAttachmentContext(serializedAttachments)}`;
+  const modelContent = `${userContent || '请查看附件并给出判断。'}${await buildAttachmentContext(attachments)}`;
 
   const msgCount = await prisma.message.count({ where: { conversationId: req.params.id, role: 'user' } });
   if (msgCount === 1 && conversation.title === getConversationTitle(conversation.expertId)) {
