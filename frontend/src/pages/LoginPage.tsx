@@ -1,19 +1,21 @@
 import { useEffect, useState } from 'react';
 import { ApiError, emailLogin, getWechatConfig, getWechatLoginUrl, passwordLogin, sendEmailCode } from '../services/api';
 import { showToast } from '../components/toastStore';
-import { getExpertDisplay } from '../data/experts';
 
 interface Props {
   onLogin: (userId: string, nickname: string, token: string) => void;
 }
 
+type LoginMode = 'code' | 'password' | 'qr';
+
 export default function LoginPage({ onLogin }: Props) {
+  const [mode, setMode] = useState<LoginMode>('code');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [accountLoading, setAccountLoading] = useState(false);
 
-  const [email, setEmail] = useState('');
+  const [contact, setContact] = useState('');
   const [emailCode, setEmailCode] = useState('');
   const [emailLoading, setEmailLoading] = useState(false);
   const [codeLoading, setCodeLoading] = useState(false);
@@ -34,11 +36,12 @@ export default function LoginPage({ onLogin }: Props) {
     return () => window.clearTimeout(timer);
   }, [countdown]);
 
-  const normalizedEmail = email.trim().toLowerCase();
-  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail);
+  const normalizedContact = contact.trim().toLowerCase();
+  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedContact);
+  const validPhone = /^1\d{10}$/.test(contact.trim());
   const validCode = /^\d{6}$/.test(emailCode.trim());
-  const canSendCode = validEmail && countdown === 0 && !codeLoading;
-  const canEmailLogin = validEmail && validCode && !emailLoading;
+  const canSendCode = (validEmail || validPhone) && countdown === 0 && !codeLoading;
+  const canCodeLogin = (validEmail || validPhone) && validCode && !emailLoading;
   const canAccountLogin = username.trim() && password.trim() && !accountLoading;
 
   const handleAccountLogin = async (e: React.FormEvent) => {
@@ -49,36 +52,45 @@ export default function LoginPage({ onLogin }: Props) {
       const data = await passwordLogin(username.trim(), password.trim());
       onLogin(data.user_id, data.nickname, data.token);
     } catch (err) {
-      showToast(err instanceof ApiError && err.status === 429 ? '操作太频繁，请稍后再试。' : '账号或密码不正确。');
+      showToast(err instanceof ApiError && err.status === 429 ? '操作太频繁 请稍后再试' : '账号或密码不正确');
     } finally {
       setAccountLoading(false);
     }
   };
 
-  const handleSendEmailCode = async () => {
+  const handleSendCode = async () => {
     if (!canSendCode) return;
+    if (validPhone) {
+      showToast('手机验证码暂未开通');
+      return;
+    }
+
     setCodeLoading(true);
     try {
-      const data = await sendEmailCode(normalizedEmail);
+      const data = await sendEmailCode(normalizedContact);
       setCountdown(60);
-      showToast(data.dev_mode ? '验证码已生成，请查看后端服务日志。' : '验证码已发送，请查看邮箱。');
+      showToast(data.dev_mode ? '验证码已生成 请查看服务日志' : '验证码已发送 请查看邮箱');
     } catch {
-      showToast('验证码发送失败，请稍后再试。');
+      showToast('验证码发送失败 请稍后再试');
     } finally {
       setCodeLoading(false);
     }
   };
 
-  const handleEmailSubmit = async (e: React.FormEvent) => {
+  const handleCodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canEmailLogin) return;
+    if (!canCodeLogin) return;
+    if (validPhone) {
+      showToast('手机验证码暂未开通');
+      return;
+    }
 
     setEmailLoading(true);
     try {
-      const data = await emailLogin(normalizedEmail, emailCode.trim());
+      const data = await emailLogin(normalizedContact, emailCode.trim());
       onLogin(data.user_id, data.nickname, data.token);
     } catch {
-      showToast('验证码错误或已过期，请重新获取。');
+      showToast('验证码错误或已过期 请重新获取');
     } finally {
       setEmailLoading(false);
     }
@@ -86,7 +98,7 @@ export default function LoginPage({ onLogin }: Props) {
 
   const handleWechatLogin = async () => {
     if (!wechatEnabled) {
-      showToast('微信登录还没有配置 AppID 和 AppSecret。');
+      showToast('扫码登录暂未配置');
       return;
     }
 
@@ -98,213 +110,172 @@ export default function LoginPage({ onLogin }: Props) {
         window.location.href = data.url;
       }
     } catch {
-      showToast('微信登录暂时不可用，请稍后再试。');
+      showToast('扫码登录暂时不可用 请稍后再试');
     } finally {
       setWechatLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#f4efe4] px-4 py-6 md:px-6 md:py-8">
-      <div className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-6xl gap-6 md:grid-cols-[1.1fr_0.9fr] md:items-center">
-        <section className="hidden h-full overflow-hidden rounded-[28px] border border-white/70 bg-white/55 p-8 shadow-[0_24px_80px_rgba(0,0,0,0.08)] md:block">
-          <div className="flex h-full flex-col justify-between">
-            <div>
-              <p className="text-sm font-black text-blue-700">AI外脑</p>
-              <h1 className="mt-4 max-w-xl text-6xl font-black leading-[1.05] text-stone-950">
-                让 AI 像你的
-                <br />
-                专家团队一样工作。
-              </h1>
-              <p className="mt-6 max-w-lg text-base leading-7 text-stone-600">
-                先用预置账号登录试用，邮箱验证码登录也已经开放。
-              </p>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl bg-stone-950 px-4 py-4 text-white">
-                <p className="text-sm font-black">先拆解</p>
-                <p className="mt-2 text-xs text-white/70">识别场景和关键变量</p>
-              </div>
-              <div className="rounded-2xl bg-white px-4 py-4 text-stone-950 shadow-sm">
-                <p className="text-sm font-black">再判断</p>
-                <p className="mt-2 text-xs text-stone-500">匹配专家视角和路径</p>
-              </div>
-              <div className="rounded-2xl bg-blue-100 px-4 py-4 text-blue-950">
-                <p className="text-sm font-black">再输出</p>
-                <p className="mt-2 text-xs text-blue-700">结论 / 清单 / 下一步</p>
-              </div>
-            </div>
-
-            <div className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-3">
-              {['wangdingjun', 'luoxiang', 'mayun', 'xuehuashi', 'li-meijin', 'thich-nhat-hanh'].map(id => {
-                const display = getExpertDisplay(id);
-                return (
-                  <div key={id} className="flex items-center gap-3 rounded-2xl bg-white/85 p-3 shadow-sm">
-                    <div className="h-12 w-12 overflow-hidden rounded-full bg-blue-50">
-                      <img src={display.avatar} alt={display.alias} className="h-full w-full object-cover" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-black text-stone-950">{display.alias}</p>
-                      <p className="truncate text-xs text-stone-500">{display.shortTitle}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+    <div className="min-h-screen bg-[#f7f4ee] text-stone-950">
+      <main className="flex min-h-screen items-center justify-center px-4 py-8">
+        <section className="w-full max-w-[392px]">
+          <div className="mb-6 text-center">
+            <p className="text-[13px] font-semibold text-stone-950">
+              AIBrain
+              <span className="ml-2 text-[12px] font-medium text-stone-500">智脑</span>
+              <span className="ml-1 text-[12px] font-medium text-stone-300">小助手</span>
+            </p>
+            <h1 className="mt-8 text-[24px] font-semibold leading-tight text-stone-950">登录</h1>
           </div>
-        </section>
 
-        <section className="flex items-center justify-center">
-          <div className="w-full max-w-md rounded-[28px] border border-white/80 bg-white p-8 shadow-[0_24px_80px_rgba(0,0,0,0.08)] md:p-10" style={{ animation: 'fadeUp 0.5s ease both' }}>
-            <div className="mb-8">
-              <p className="text-sm font-black text-blue-700 md:hidden">AI外脑</p>
-              <h2 className="mt-2 text-center text-2xl font-black text-gray-950 md:text-left md:text-3xl">
-                登录 AI 外脑
-              </h2>
-              <p className="mt-3 text-center text-sm leading-6 text-gray-500 md:text-left">
-                使用分配给你的账号密码登录，或使用邮箱验证码进入。
-              </p>
+          <div className="rounded-[20px] border border-[#eadfce] bg-[#fffaf2] p-4 shadow-[0_12px_34px_rgba(80,64,42,0.06)]">
+            <div className="mb-4 grid grid-cols-3 rounded-xl bg-[#f1eadf] p-1">
+              {[
+                { id: 'code', label: '验证码' },
+                { id: 'password', label: '密码' },
+                { id: 'qr', label: '扫码' },
+              ].map(item => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setMode(item.id as LoginMode)}
+                  className={`rounded-lg px-2 py-2 text-[13px] font-semibold transition ${
+                    mode === item.id ? 'bg-white text-stone-950 shadow-sm' : 'text-stone-500 hover:text-stone-800'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
             </div>
 
-            <form onSubmit={handleAccountLogin} autoComplete="off">
-              <label className="block">
-                <span className="mb-2 block text-xs font-black uppercase tracking-wide text-stone-500">
-                  用户名
-                </span>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
-                  placeholder="请输入用户名"
-                  autoComplete="off"
-                  name="aibrain-account-name"
-                  className="mb-4 w-full rounded-2xl border border-stone-300 px-4 py-3 text-base outline-none transition placeholder:text-stone-400 focus:border-blue-500"
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-2 block text-xs font-black uppercase tracking-wide text-stone-500">
-                  密码
-                </span>
-                <div className="mb-5 grid grid-cols-[1fr_44px] overflow-hidden rounded-2xl border border-stone-300 focus-within:border-blue-500">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={e => setPassword(e.target.value)}
-                    placeholder="请输入密码"
-                    autoComplete="new-password"
-                    name="aibrain-account-pass"
-                    className="min-w-0 px-4 py-3 text-base outline-none placeholder:text-stone-400"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(value => !value)}
-                    aria-label={showPassword ? '隐藏密码' : '显示密码'}
-                    className="grid place-items-center border-l border-stone-300 bg-white text-stone-500 transition hover:bg-stone-50 hover:text-stone-900"
-                  >
-                    {showPassword ? (
-                      <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 3l18 18" />
-                        <path d="M10.58 10.58A2 2 0 0 0 13.42 13.42" />
-                        <path d="M9.88 5.08A10.94 10.94 0 0 1 12 5c7 0 10 7 10 7a18.1 18.1 0 0 1-4.17 5.39" />
-                        <path d="M6.1 6.1C3.6 8.1 2 12 2 12s3 7 10 7a10.7 10.7 0 0 0 4.24-.87" />
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
-                        <circle cx="12" cy="12" r="3" />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-              </label>
-
-              <button
-                type="submit"
-                disabled={!canAccountLogin}
-                className="w-full rounded-2xl bg-stone-950 py-3.5 text-sm font-black text-white transition hover:bg-stone-800 disabled:opacity-50"
-              >
-                {accountLoading ? '正在进入...' : '账号登录'}
-              </button>
-            </form>
-
-            <div className="my-7 flex items-center gap-3">
-              <div className="h-px flex-1 bg-stone-200" />
-              <span className="text-xs font-black text-stone-400">邮箱登录</span>
-              <div className="h-px flex-1 bg-stone-200" />
-            </div>
-
-            <form onSubmit={handleEmailSubmit}>
-              <label className="block">
-                <span className="mb-2 block text-xs font-black uppercase tracking-wide text-stone-500">
-                  邮箱
-                </span>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  className="mb-4 w-full rounded-2xl border border-stone-300 px-4 py-3 text-base outline-none transition placeholder:text-stone-400 focus:border-blue-500"
-                />
-              </label>
-
-              <label className="block">
-                <span className="mb-2 block text-xs font-black uppercase tracking-wide text-stone-500">
-                  验证码
-                </span>
-                <div className="mb-5 grid grid-cols-[1fr_118px] gap-3">
+            {mode === 'code' && (
+              <form onSubmit={handleCodeSubmit}>
+                <label className="block">
+                  <span className="mb-2 block text-[12px] font-semibold text-stone-500">手机或邮箱</span>
                   <input
                     type="text"
-                    inputMode="numeric"
-                    value={emailCode}
-                    onChange={e => setEmailCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                    placeholder="6 位数字"
-                    autoComplete="one-time-code"
-                    className="min-w-0 rounded-2xl border border-stone-300 px-4 py-3 text-base outline-none transition placeholder:text-stone-400 focus:border-blue-500"
+                    value={contact}
+                    onChange={e => setContact(e.target.value)}
+                    placeholder="请输入手机或邮箱"
+                    autoComplete="email"
+                    className="mb-4 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-[14px] outline-none transition placeholder:text-stone-300 focus:border-[#8a5a35]"
                   />
-                  <button
-                    type="button"
-                    onClick={handleSendEmailCode}
-                    disabled={!canSendCode}
-                    className="rounded-2xl border border-stone-300 bg-white px-3 text-sm font-black text-stone-900 transition hover:border-blue-500 disabled:opacity-50"
-                  >
-                    {codeLoading ? '发送中' : countdown > 0 ? `${countdown}s` : '获取验证码'}
-                  </button>
-                </div>
-              </label>
+                </label>
 
-              <button
-                type="submit"
-                disabled={!canEmailLogin}
-                className="w-full rounded-2xl bg-blue-700 py-3.5 text-sm font-black text-white transition hover:bg-blue-600 disabled:opacity-50"
-              >
-                {emailLoading ? '正在进入...' : '邮箱登录'}
-              </button>
-            </form>
+                <label className="block">
+                  <span className="mb-2 block text-[12px] font-semibold text-stone-500">验证码</span>
+                  <div className="mb-4 grid grid-cols-[1fr_108px] gap-2">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={emailCode}
+                      onChange={e => setEmailCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="6 位数字"
+                      autoComplete="one-time-code"
+                      className="min-w-0 rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-[14px] outline-none transition placeholder:text-stone-300 focus:border-[#8a5a35]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSendCode}
+                      disabled={!canSendCode}
+                      className="rounded-xl border border-stone-200 bg-white px-2 text-[13px] font-semibold text-stone-700 transition hover:border-[#8a5a35] disabled:opacity-40"
+                    >
+                      {codeLoading ? '发送中' : countdown > 0 ? `${countdown}s` : '获取验证码'}
+                    </button>
+                  </div>
+                </label>
 
-            {wechatEnabled && (
-              <>
-                <div className="my-7 flex items-center gap-3">
-                  <div className="h-px flex-1 bg-stone-200" />
-                  <span className="text-xs font-black text-stone-400">微信登录</span>
-                  <div className="h-px flex-1 bg-stone-200" />
-                </div>
+                <button
+                  type="submit"
+                  disabled={!canCodeLogin}
+                  className="w-full rounded-xl bg-[#2f251d] py-2.5 text-[14px] font-semibold text-white transition hover:bg-[#4a3728] disabled:opacity-40"
+                >
+                  {emailLoading ? '正在进入' : '登录 / 注册'}
+                </button>
+              </form>
+            )}
 
+            {mode === 'password' && (
+              <form onSubmit={handleAccountLogin} autoComplete="off">
+                <label className="block">
+                  <span className="mb-2 block text-[12px] font-semibold text-stone-500">用户名或账号</span>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={e => setUsername(e.target.value)}
+                    placeholder="请输入用户名或账号"
+                    autoComplete="username"
+                    name="aibrain-account-name"
+                    className="mb-4 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-[14px] outline-none transition placeholder:text-stone-300 focus:border-[#8a5a35]"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="mb-2 block text-[12px] font-semibold text-stone-500">密码</span>
+                  <div className="mb-4 grid grid-cols-[1fr_42px] overflow-hidden rounded-xl border border-stone-200 bg-white focus-within:border-[#8a5a35]">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="请输入密码"
+                      autoComplete="current-password"
+                      name="aibrain-account-pass"
+                      className="min-w-0 bg-transparent px-3 py-2.5 text-[14px] outline-none placeholder:text-stone-300"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(value => !value)}
+                      aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                      className="grid place-items-center border-l border-stone-200 text-stone-400 transition hover:bg-stone-50 hover:text-stone-700"
+                    >
+                      {showPassword ? (
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 3l18 18" />
+                          <path d="M10.58 10.58A2 2 0 0 0 13.42 13.42" />
+                          <path d="M9.88 5.08A10.94 10.94 0 0 1 12 5c7 0 10 7 10 7a18.1 18.1 0 0 1-4.17 5.39" />
+                          <path d="M6.1 6.1C3.6 8.1 2 12 2 12s3 7 10 7a10.7 10.7 0 0 0 4.24-.87" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </label>
+
+                <button
+                  type="submit"
+                  disabled={!canAccountLogin}
+                  className="w-full rounded-xl bg-[#2f251d] py-2.5 text-[14px] font-semibold text-white transition hover:bg-[#4a3728] disabled:opacity-40"
+                >
+                  {accountLoading ? '正在进入' : '登录 / 注册'}
+                </button>
+              </form>
+            )}
+
+            {mode === 'qr' && (
+              <div className="text-center">
                 <button
                   type="button"
                   onClick={handleWechatLogin}
                   disabled={wechatLoading}
-                  className="w-full rounded-2xl bg-[#07c160] py-3.5 text-sm font-black text-white transition hover:bg-[#06ad56] disabled:opacity-50"
+                  className="grid aspect-square w-full place-items-center rounded-2xl border border-stone-200 bg-white text-stone-400 transition hover:border-[#8a5a35] disabled:opacity-40"
+                  aria-label="扫码登录"
                 >
-                  {wechatLoading ? '正在打开微信...' : '微信扫码登录'}
+                  <svg viewBox="0 0 24 24" className="h-20 w-20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z" />
+                    <path d="M14 14h2v2h-2zM18 14h2v6h-4v-2h2zM14 18h2v2h-2z" />
+                  </svg>
                 </button>
-              </>
+                <p className="mt-3 text-[13px] text-stone-500">{wechatLoading ? '正在打开扫码窗口' : '使用微信扫码登录'}</p>
+              </div>
             )}
           </div>
         </section>
-      </div>
+      </main>
     </div>
   );
 }
