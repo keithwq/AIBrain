@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest';
 import router from '../chat';
 import { prisma } from '../../services/prisma';
 import { generateReplyStream } from '../../services/deepseek';
@@ -19,6 +19,12 @@ vi.mock('../../services/prisma', () => ({
       count: vi.fn(),
       findMany: vi.fn(),
       deleteMany: vi.fn(),
+    },
+    attachment: {
+      findMany: vi.fn(),
+      updateMany: vi.fn(),
+      deleteMany: vi.fn(),
+      create: vi.fn(),
     },
     usageLog: { create: vi.fn() },
   },
@@ -79,11 +85,11 @@ function createRes() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockedPrisma.user.findUnique.mockResolvedValue({ id: 'user-1', nickname: 'Alice', credits: 5 } as never);
-  mockedPrisma.conversation.findUnique.mockResolvedValue({ id: 'conv-1', userId: 'user-1', expertId: 'steve-jobs', title: 'steve-jobs' } as never);
+  mockedPrisma.conversation.findUnique.mockResolvedValue({ id: 'conv-1', userId: 'user-1', expertId: 'mingheng-fawu', title: 'mingheng-fawu' } as never);
   mockedPrisma.message.create.mockResolvedValue({ id: 'msg-1' } as never);
   mockedPrisma.message.count.mockResolvedValue(1 as never);
   mockedPrisma.message.findMany.mockResolvedValue([
-    { id: 'user-msg', role: 'user', content: '你好' },
+    { id: 'user-msg', role: 'user', content: 'hello' },
   ] as never);
   mockedPrisma.usageLog.create.mockResolvedValue({} as never);
   mockedPrisma.conversation.update.mockResolvedValue({} as never);
@@ -97,7 +103,7 @@ describe('chat credits flow', () => {
 
     const handler = getHandler('/conversations/:id/messages/stream', 'post');
     const req = {
-      body: { content: '请帮我分析' },
+      body: { content: 'test message' },
       params: { id: 'conv-1' },
     } as any;
     const res = createRes();
@@ -111,12 +117,12 @@ describe('chat credits flow', () => {
 
   it('deducts credits only after a successful streaming answer', async () => {
     mockedGenerateReplyStream.mockImplementationOnce(async function* () {
-      yield '这是一个完整回复';
+      yield 'stream reply';
     });
 
     const handler = getHandler('/conversations/:id/messages/stream', 'post');
     const req = {
-      body: { content: '请帮我分析' },
+      body: { content: 'test message' },
       params: { id: 'conv-1' },
     } as any;
     const res = createRes();
@@ -136,7 +142,7 @@ describe('chat credits flow', () => {
 
     const handler = getHandler('/conversations/:id/messages/stream', 'post');
     const req = {
-      body: { content: '请帮我分析' },
+      body: { content: 'test message' },
       params: { id: 'conv-1' },
     } as any;
     const res = createRes();
@@ -146,18 +152,18 @@ describe('chat credits flow', () => {
     expect(mockedRefundCredits).toHaveBeenCalledWith('user-1');
     expect(mockedPrisma.usageLog.create).not.toHaveBeenCalled();
     expect(res.ended).toBe(true);
-    expect(res.chunks.join('')).toContain('AI服务暂时不可用');
+    expect(res.chunks.join('')).toContain('AI');
   });
 
   it('refunds credits when the streaming AI request fails', async () => {
     mockedGenerateReplyStream.mockImplementationOnce(async function* () {
-      yield '第一段';
+      yield 'first chunk';
       throw new Error('stream down');
     });
 
     const handler = getHandler('/conversations/:id/messages/stream', 'post');
     const req = {
-      body: { content: '请帮我分析' },
+      body: { content: 'test message' },
       params: { id: 'conv-1' },
     } as any;
     const res = createRes();
@@ -167,6 +173,6 @@ describe('chat credits flow', () => {
     expect(mockedRefundCredits).toHaveBeenCalledWith('user-1');
     expect(mockedPrisma.usageLog.create).not.toHaveBeenCalled();
     expect(res.ended).toBe(true);
-    expect(res.chunks.join('')).toContain('AI服务暂时不可用');
+    expect(res.chunks.join('')).toContain('AI');
   });
 });

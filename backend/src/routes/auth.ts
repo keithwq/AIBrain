@@ -239,14 +239,13 @@ router.post('/email/login', async (req, res) => {
     return res.status(400).json({ error: 'code is invalid or expired' });
   }
 
-  let user = await prisma.user.findUnique({ where: { email } });
+  const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
-    user = await prisma.user.create({
-      data: {
-        email,
-        nickname: await uniqueEmailNickname(email),
-      },
+    await prisma.emailLoginCode.update({
+      where: { id: record.id },
+      data: { usedAt: new Date(), attempts: nextAttempts },
     });
+    return res.status(403).json({ error: 'email not registered, please contact admin' });
   }
 
   await prisma.emailLoginCode.update({

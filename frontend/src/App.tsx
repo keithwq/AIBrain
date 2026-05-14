@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useState } from 'react';
 import LoginPage from './pages/LoginPage';
 import HomePage from './pages/HomePage';
 import ExpertsPage from './pages/ExpertsPage';
 import ChatPage from './pages/ChatPage';
 import CreditsPage from './pages/CreditsPage';
 import Toast from './components/Toast';
-import { createConversation } from './services/api';
+import { ApiError, createConversation } from './services/api';
 import { showToast } from './components/toastStore';
 import { getExpertDisplay } from './data/experts';
 
@@ -45,6 +45,7 @@ function App() {
   const [userId, setUserId] = useState(() => session?.userId || '');
   const [nickname, setNickname] = useState(() => session?.nickname || '');
   const [token, setToken] = useState(() => session?.token || '');
+  const [hiddenExpertId, setHiddenExpertId] = useState(() => new URLSearchParams(window.location.search).get('hidden_expert') || '');
 
   const handleLogin = (uid: string, nick: string, tok: string) => {
     saveSession(uid, nick, tok);
@@ -67,6 +68,10 @@ function App() {
     window.addEventListener('message', handleWechatMessage);
 
     const params = new URLSearchParams(window.location.search);
+    const rawHiddenExpert = params.get('hidden_expert');
+    if (rawHiddenExpert) {
+      setHiddenExpertId(rawHiddenExpert);
+    }
     const rawWechatLogin = params.get('wechat_login');
     let loginTimer: number | undefined;
     if (rawWechatLogin) {
@@ -93,6 +98,16 @@ function App() {
   }, []);
 
   const handleSelectExpert = async (expertId: string) => {
+    if (!token) {
+      clearSession();
+      setUserId('');
+      setNickname('');
+      setToken('');
+      setView({ page: 'login' });
+      showToast('请先登录后再进入智脑');
+      return;
+    }
+
     try {
       const conv = await createConversation(token, expertId);
       setView({
@@ -101,19 +116,52 @@ function App() {
         expertId,
         expertName: getExpertDisplay(expertId).alias,
       });
-    } catch {
-      showToast('创建对话失败，请重试');
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        clearSession();
+        setUserId('');
+        setNickname('');
+        setToken('');
+        setView({ page: 'login' });
+        showToast('登录已过期，请重新登录');
+        return;
+      }
+      if (err instanceof ApiError && err.status === 404) {
+        showToast('这个智脑还没有加载完成');
+        return;
+      }
+      showToast('创建对话失败，请稍后重试');
     }
   };
 
-  const handleOpenConversation = useCallback((conversationId: string, expertId: string) => {
-    setView({
-      page: 'chat',
-      conversationId,
-      expertId,
-      expertName: getExpertDisplay(expertId).alias,
-    });
-  }, []);
+  useEffect(() => {
+    if (!token || !hiddenExpertId) return;
+    if (!['songbai-xiansheng', 'anran-laoshi'].includes(hiddenExpertId)) return;
+
+    let cancelled = false;
+    void (async () => {
+      try {
+        const conv = await createConversation(token, hiddenExpertId);
+        if (cancelled) return;
+        setView({
+          page: 'chat',
+          conversationId: conv.id,
+          expertId: hiddenExpertId,
+          expertName: getExpertDisplay(hiddenExpertId).alias,
+        });
+        setHiddenExpertId('');
+        const url = new URL(window.location.href);
+        url.searchParams.delete('hidden_expert');
+        window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+      } catch {
+        if (!cancelled) showToast('闅愯棌宸ヤ綔鍙板垱寤哄け璐ワ紝璇风‘璁ゅ悗绔凡鍔犺浇瀵瑰簲 persona');
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [hiddenExpertId, token]);
 
   const handleOpenCredits = useCallback(() => {
     setView({ page: userId ? 'credits' : 'login' });
@@ -158,7 +206,6 @@ function App() {
           token={token}
           nickname={nickname}
           onSelectExpert={handleSelectExpert}
-          onOpenConversation={handleOpenConversation}
           onOpenCredits={handleOpenCredits}
           onOpenHome={handleOpenHome}
           onLogout={handleLogout}

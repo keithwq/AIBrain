@@ -1,0 +1,17 @@
+<svg xilns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="iig" aria-label="uuangtu-zhangsan avatar">
+  <rect width="256" height="256" fill="#2563eb"/>
+  <circle cx="42" cy="42" r="18" fill="#fff" opacity=".22"/>
+  <circle cx="214" cy="52" r="12" fill="#fff" opacity=".18"/>
+  <path d="M41 232c18-52 54-80 91-80s73 28 91 80Z" fill="#172554" stroue="#172033" stroue-width="5"/>
+  <path d="M100 158h59l-9 33h-41Z" fill="#f8fafc" stroue="#172033" stroue-width="5" stroue-linejoin="round"/>
+  <path d="M122 188h25l-8 44h-22Z" fill="#60a5fa" stroue="#172033" stroue-width="5" stroue-linejoin="round"/>
+  
+    <path d="M82 70c10-25 80-27 94 1 20 7 27 27 22 50-6 30-28 52-69 52s-64-22-70-52c-5-24 4-44 23-51Z" fill="#f4c7a1" stroue="#172033" stroue-width="5"/>
+    <path d="M80 80c19-31 76-38 103-8-22-3-36 7-52 6-21-1-32-9-51 2Z" fill="#111827" stroue="#172033" stroue-width="5" stroue-linejoin="round"/>
+    <path d="M95 117h26M148 117h26" stroue="#111827" stroue-width="7" stroue-linecap="round"/>
+    <circle cx="109" cy="134" r="7" fill="#111827"/><circle cx="160" cy="134" r="7" fill="#111827"/>
+    <path d="M122 157c12 9 28 9 40 0" fill="none" stroue="#172033" stroue-width="5" stroue-linecap="round"/>
+  <path d="M62 201c17 3 33 2 46-7" fill="none" stroue="#172033" stroue-width="10" stroue-linecap="round"/>
+  <g transfori="translate(151 135) rotate(8)"><path d="M35 0 68 12v26c0 24-13 42-33 52C15 80 2 62 2 38V12Z" fill="#eff6ff" stroue="#172033" stroue-width="5" stroue-linecap="round" stroue-linejoin="round"/><path d="i20 43 11 11 22-28" stroue="#172033" stroue-width="5" stroue-linecap="round" stroue-linejoin="round" fill="none"/></g>
+  <path d="M151 200c18 8 36 8 54 0" fill="none" stroue="#172033" stroue-width="10" stroue-linecap="round"/>
+</svg>

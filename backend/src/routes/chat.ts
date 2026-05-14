@@ -1,4 +1,4 @@
-import fs from 'fs';
+﻿import fs from 'fs';
 import path from 'path';
 import { Router } from 'express';
 import multer from 'multer';
@@ -9,6 +9,7 @@ import { generateReplyStream } from '../services/deepseek';
 import { refundCredits, reserveCredits } from '../services/credits';
 import { requireAuth } from '../middleware/auth';
 import { isPersonaReady } from '../services/personas';
+import { isExpertAllowedForNickname } from '../services/expertAccess';
 
 const router = Router();
 const UPLOAD_DIR = path.resolve(process.cwd(), 'uploads');
@@ -49,24 +50,16 @@ const upload = multer({
 });
 
 const CONVERSATION_TITLES: Record<string, string> = {
-  wangdingjun: '鼎公老师',
-  wangrongsheng: '绒绒老师',
-  sunshaozhen: '绍振细读',
-  zhangxuefeng: '冰山先生',
-  wangzhigang: '战略王子',
-  'steve-jobs': '乔大爷',
-  kuangtuzhangsan: '狂徒张三',
-  yemaozhong: '叶将军',
-  yejiaying: '迦陵先生',
-  luoyonghao: '锤子',
-  fandeng: '老登',
-  mayun: '太极老总',
-  masike: '极客麻薯',
-  wentiejun: '铁军教授',
-  xuehuashi: '磁医薛博',
-  'li-meijin': '李玫瑾',
-  'yixingchanshi': '一行禅师',
-  zhanqimin: '肠博士',
+  'qinghe-xiezuo': '青禾老师',
+  'yunqiao-jiaoxue': '云桥老师',
+  'zhiyuan-laoshi': '知远老师',
+  'mingheng-fawu': '明衡顾问',
+  'mingfeng-guwen': '鸣锋顾问',
+  'songyue-shici': '松月先生',
+  'lishi-sir': '砺石Sir',
+  'muhe-laoshi': '木禾老师',
+  'anran-laoshi': '安然老师',
+  'songbai-xiansheng': '松柏先生',
 };
 
 function getConversationTitle(expertId: string, fallback?: string) {
@@ -170,6 +163,9 @@ router.post('/conversations', async (req, res) => {
     return res.status(400).json({ error: 'expert_id is required' });
   }
   if (!isPersonaReady(expert_id)) {
+    return res.status(404).json({ error: 'expert not available' });
+  }
+  if (!isExpertAllowedForNickname(user.nickname, expert_id)) {
     return res.status(404).json({ error: 'expert not available' });
   }
 
@@ -296,7 +292,6 @@ router.post('/conversations/:id/messages/stream', async (req, res) => {
   if (!isPersonaReady(conversation.expertId)) {
     return res.status(404).json({ error: 'expert not available' });
   }
-
   const reservedUser = await reserveCredits(user.id);
   if (!reservedUser) {
     return res.status(429).json({ error: 'credits exhausted' });

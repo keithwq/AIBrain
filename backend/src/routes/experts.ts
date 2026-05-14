@@ -1,5 +1,7 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
 import { countPersonaSkillLines, getPersonaStatus, loadPersonaSkill, MIN_READY_SKILL_LINES } from '../services/personas';
+import { prisma } from '../services/prisma';
+import { getAllowedExpertIdsForNickname, isExpertAllowedForNickname } from '../services/expertAccess';
 
 const router = Router();
 
@@ -16,30 +18,20 @@ interface Expert {
 
 const experts: Expert[] = [
   {
-    id: 'wangdingjun',
-    name: '鼎公老师',
-    alias: '鼎公老师',
-    avatar: '/experts/wangdingjun.png',
+    id: 'qinghe-xiezuo',
+    name: '青禾老师',
+    alias: '青禾老师',
+    avatar: '/experts/qinghe-xiezuo.svg',
     description: '面向教培机构语文老师的作文教学、批改反馈、教研设计与家校沟通顾问。',
     tagline: '把作文课、批改、续班和家长沟通做成能直接交付的材料',
     expertise: ['作文课设计', '作文批改', '教研讲义', '家长沟通', '续班转化', '老师培训'],
     status: 'ready',
   },
   {
-    id: 'sunshaozhen',
-    name: '绍振细读',
-    alias: '绍振细读',
-    avatar: '/experts/sunshaozhen.svg',
-    description: '文学类文本细读与阅读教学工作台：层次阐释、讲读主问题链、板书层进与阅读题文学逻辑（不冒充官方阅卷标准）。',
-    tagline: '把一篇课文读深一层、讲清一层',
-    expertise: ['文本细读', '阅读教学设计', '课堂主问题', '文学类课文', '教研讲读'],
-    status: 'ready',
-  },
-  {
-    id: 'wangrongsheng',
-    name: '绒绒老师',
-    alias: '绒绒老师',
-    avatar: '/experts/wangrongsheng.svg',
+    id: 'yunqiao-jiaoxue',
+    name: '云桥老师',
+    alias: '云桥老师',
+    avatar: '/experts/yunqiao-jiaoxue.svg',
     description:
       '语文教学内容与课堂设计判断智脑：帮老师判断这一课教什么、不教什么，检查目标—内容—活动—评价是否一致；不主全文作文升格、不主纯文学审美独白。',
     tagline: '先钉这一课教什么，再判活动服不服',
@@ -47,153 +39,83 @@ const experts: Expert[] = [
     status: 'ready',
   },
   {
-    id: 'zhangxuefeng',
-    name: '冰山先生',
-    alias: '冰山先生',
-    avatar: '/experts/zhangxuefeng.png',
-    description: '升学、专业选择和就业路径判断智脑，擅长把家庭条件与现实回报放到同一张图里看。',
-    tagline: '升学路径、专业选择和就业结果判断',
-    expertise: ['教育规划', '职业规划', '考研指导', '高考志愿'],
+    id: 'zhiyuan-laoshi',
+    name: '知远老师',
+    alias: '知远老师',
+    avatar: '/experts/zhiyuan-laoshi.svg',
+    description: '升学、就业和留学规划工作台，擅长把省份位次、学校层级、专业壁垒、家庭现金流、目标城市、就业中位数和留学回本线放到同一张表里判断。',
+    tagline: '高考冲稳保、考研择校、专业红黑榜、就业倒推和留学回本判断',
+    expertise: ['冲稳保填报', '考研择校', '专业红黑榜', '就业倒推', '留学回本'],
     status: 'ready',
   },
   {
-    id: 'wangzhigang',
-    name: '战略王子',
-    alias: '战略王子',
-    avatar: '/experts/wangzhigang.svg',
-    description: '战略策划顾问，适合项目定位、资源盘点、城市运营和文旅破局。',
-    tagline: '项目战略定位、资源盘点和破局路径',
-    expertise: ['战略策划', '城市运营', '文旅开发', '政商资源整合'],
+    id: 'mingheng-fawu',
+    name: '明衡顾问',
+    alias: '明衡顾问',
+    avatar: '/experts/mingheng-fawu.svg',
+    description: '法律风险预咨询与合规材料整理工作台，帮助用户梳理事实、证据、程序节点和可执行的下一步。',
+    tagline: '先明事实，再衡风险，把能做、慎做、别碰讲清楚',
+    expertise: ['法律风险', '证据梳理', '合同争议', '劳动纠纷', '公开表达边界'],
     status: 'ready',
   },
   {
-    id: 'steve-jobs',
-    name: '乔大爷',
-    alias: '乔大爷',
-    avatar: '/experts/steve-jobs.png',
-    description: '产品取舍与体验打磨视角，帮助把复杂产品砍到清晰、锋利、可用。',
-    tagline: '产品取舍、体验打磨和最小可用版本',
-    expertise: ['产品设计', '创新思维', '领导力', '科技美学'],
-    status: 'ready',
-  },
-  {
-    id: 'kuangtuzhangsan',
-    name: '狂徒张三',
-    alias: '狂徒张三',
-    avatar: '/experts/kuangtuzhangsan.svg',
-    description: '嘴快逻辑稳，帮你先看事实、证据和最容易踩的坑。',
-    tagline: '把事情讲清楚，判断哪些能做、哪些慎做、哪些别碰',
-    expertise: ['法律避坑', '证据梳理', '合同风险', '公开发言边界'],
-    status: 'ready',
-  },
-  {
-    id: 'yemaozhong',
-    name: '叶将军',
-    alias: '叶将军',
-    avatar: '/experts/yemaozhong.png',
-    description: '冲突营销视角，帮助找到消费者心里的矛盾、记忆点和传播钩子。',
+    id: 'mingfeng-guwen',
+    name: '鸣锋顾问',
+    alias: '鸣锋顾问',
+    avatar: '/experts/mingfeng-guwen.svg',
+    description: '冲突营销与品牌定位工作台，帮助找到消费者心里的矛盾、记忆点和传播钩子。',
     tagline: '品牌冲突、广告钩子和传播记忆点',
     expertise: ['品牌营销', '广告策划', '冲突营销', '市场定位'],
     status: 'ready',
   },
   {
-    id: 'yejiaying',
-    name: '迦陵先生',
-    alias: '迦陵先生',
-    avatar: '/experts/yejiaying.svg',
+    id: 'songyue-shici',
+    name: '松月先生',
+    alias: '松月先生',
+    avatar: '/experts/songyue-shici.svg',
     description: '古典诗词讲读与鉴赏智脑：诵读声情、兴发感动、意象与典故提示、课堂主问题链；不做作文主台与现代文赋分模板。',
     tagline: '把古诗与词读深一层、讲清楚一层',
     expertise: ['古诗带读', '词学入门', '意象章法', '典故互文', '诵读与声情', '社团课设计'],
     status: 'ready',
   },
   {
-    id: 'luoyonghao',
-    name: '锤子',
-    alias: '锤子',
-    avatar: '/experts/luoyonghao.svg',
-    description: '产品表达与危机回应顾问，擅长把复杂卖点讲成人话、把质疑接住。',
-    tagline: '产品发布、用户异议和公共表达',
-    expertise: ['创业', '产品设计', '营销传播', '危机公关'],
+    id: 'lishi-sir',
+    name: '砺石Sir',
+    alias: '砺石Sir',
+    avatar: '/experts/lishi-sir.svg',
+    description: '产品、创业复盘与品牌信任顾问，擅长把卖点讲成人话、把质疑接住、把承诺落到兑现。',
+    tagline: '产品发布、创业复盘、用户异议和公共表达',
+    expertise: ['创业复盘', '产品判断', '营销传播', '危机回应'],
     status: 'ready',
   },
   {
-    id: 'fandeng',
-    name: '老登',
-    alias: '老登',
-    avatar: '/experts/fandeng.svg',
-    description: '知识拆解和表达顾问，像一盏会读书的灯，讲结构讲得很明白。',
-    tagline: '知识拆解、表达训练和读书方法',
-    expertise: ['读书方法', '知识管理', '领导力', '家庭养育'],
-    status: 'ready',
-  },
-  {
-    id: 'mayun',
-    name: '太极老总',
-    alias: '太极老总',
-    avatar: '/experts/mayun.png',
-    description: '生态、组织与长期格局视角，适合商业趋势、组织能力和合作网络判断。',
-    tagline: '商业格局、组织能力和生态打法',
-    expertise: ['企业管理', '电子商务', '组织文化', '未来趋势'],
-    status: 'ready',
-  },
-  {
-    id: 'masike',
-    name: '极客麻薯',
-    alias: '极客麻薯',
-    avatar: '/experts/masike.svg',
-    description: '第一性原理与工程化视角，像一枚会冒火的火箭，专盯目标、成本和实验路径。',
-    tagline: '第一性原理、工程瓶颈和快速实验',
-    expertise: ['科技创新', '航天工程', '电动汽车', '人工智能'],
-    status: 'ready',
-  },
-  {
-    id: 'wentiejun',
-    name: '铁军教授',
-    alias: '铁军教授',
-    avatar: '/experts/wentiejun.svg',
-    description: '政治经济学与三农结构视角，适合制度成本、城乡关系和基层执行分析。',
-    tagline: '制度结构、三农问题和城乡关系',
-    expertise: ['三农政策', '政治经济学', '制度创新', '城乡发展'],
-    status: 'ready',
-  },
-  {
-    id: 'xuehuashi',
-    name: '磁医薛博',
-    alias: '磁医薛博',
-    avatar: '/experts/xuehuashi.svg',
-    description: '磁医学判断顾问，围绕机理、证据和现实边界看技术与产业路径。',
-    tagline: '磁医学理解、证据分析和产业化判断',
-    expertise: ['磁医学', '机理判断', '证据分析', '产业化验证'],
-    status: 'ready',
-  },
-  {
-    id: 'li-meijin',
-    name: '李玫瑾',
-    alias: '李玫瑾',
-    avatar: '/experts/li-meijin.svg',
+    id: 'muhe-laoshi',
+    name: '木禾老师',
+    alias: '木禾老师',
+    avatar: '/experts/muhe-laoshi.svg',
     description: '家庭教育与犯罪心理判断智脑，围绕心理抚养、早年养育和未成年成长边界给出判断。',
     tagline: '心理抚养、成长边界和家庭教育判断',
     expertise: ['心理抚养', '家庭教育', '青少年成长', '犯罪预防'],
     status: 'ready',
   },
   {
-    id: 'yixingchanshi',
-    name: '一行禅师',
-    alias: '一行禅师',
-    avatar: '/experts/yixingchanshi.svg',
-    description: '正念舒缓与高情商回应智脑，帮助用户把压力、焦虑和关系冲突先安顿回呼吸和温和边界。',
-    tagline: '呼吸练习、情绪安顿、安慰话术和关系降温',
-    expertise: ['正念呼吸', '情绪安顿', '安慰话术', '关系修复'],
+    id: 'anran-laoshi',
+    name: '安然老师',
+    alias: '安然老师',
+    avatar: '/experts/anran-laoshi.svg',
+    description: '状态整理与关系沟通智脑，帮助用户整理处理步骤、可发送文本和必要边界。',
+    tagline: '状态整理、沟通文本、冲突降温和短时练习',
+    expertise: ['状态整理', '沟通文本', '冲突降温', '关系沟通'],
     status: 'ready',
   },
   {
-    id: 'zhanqimin',
-    name: '肠博士',
-    alias: '肠博士',
-    avatar: '/experts/zhanqimin.svg',
-    description: '肠道健康判断智脑，适合症状梳理、检查沟通和长期调理边界。',
-    tagline: '肠道健康、检查沟通和长期调理判断',
-    expertise: ['肠道健康', '症状梳理', '检查沟通', '长期调理'],
+    id: 'songbai-xiansheng',
+    name: '松柏先生',
+    alias: '松柏先生',
+    avatar: '/experts/songbai-xiansheng.svg',
+    description: '中医养生与家庭食谱工作台，适合做体质自查、药食同源学习、健康食谱和中医咨询的信息梳理。',
+    tagline: '体质自查、药食同源、健康食谱和中医咨询',
+    expertise: ['中医咨询', '体质自查', '药食同源', '健康食谱', '家庭保健'],
     status: 'ready',
   },
 ];
@@ -217,15 +139,30 @@ function serializeExpert(expert: Expert) {
   };
 }
 
-router.get('/', (_req, res) => {
-  res.json(experts.map(serializeExpert).filter(expert => expert.status === 'ready'));
+router.get('/', async (req, res) => {
+  const token = req.headers['x-auth-token'] as string | undefined;
+  const user = token ? await prisma.user.findUnique({ where: { token } }) : null;
+  const allowedExpertIds = user ? getAllowedExpertIdsForNickname(user.nickname) : null;
+
+  res.json(
+    experts
+      .map(serializeExpert)
+      .filter(expert => expert.status === 'ready')
+      .filter(expert => !allowedExpertIds || allowedExpertIds.has(expert.id)),
+  );
 });
 
-router.get('/:id', (req, res) => {
+router.get('/:id', async (req, res) => {
   const expert = experts.find(item => item.id === req.params.id);
   if (!expert) {
     return res.status(404).json({ error: 'expert not found' });
   }
+  const token = req.headers['x-auth-token'] as string | undefined;
+  const user = token ? await prisma.user.findUnique({ where: { token } }) : null;
+  if (user && !isExpertAllowedForNickname(user.nickname, expert.id)) {
+    return res.status(404).json({ error: 'expert not found' });
+  }
+
   const serialized = serializeExpert(expert);
   if (serialized.status !== 'ready') {
     return res.status(404).json({ error: 'expert not available' });

@@ -117,7 +117,7 @@ export default function LoginPage({ onLogin }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-[#f7f4ee] text-stone-950">
+    <div className="min-h-screen bg-[var(--bg)] text-stone-950">
       <main className="flex min-h-screen items-center justify-center px-4 py-8">
         <section className="w-full max-w-[392px]">
           <div className="mb-6 text-center">
@@ -129,8 +129,8 @@ export default function LoginPage({ onLogin }: Props) {
             <h1 className="mt-8 text-[24px] font-semibold leading-tight text-stone-950">登录</h1>
           </div>
 
-          <div className="rounded-[20px] border border-[#eadfce] bg-[#fffaf2] p-4 shadow-[0_12px_34px_rgba(80,64,42,0.06)]">
-            <div className="mb-4 grid grid-cols-3 rounded-xl bg-[#f1eadf] p-1">
+          <div className="rounded-md border border-black/10 bg-white p-4">
+            <div className="mb-4 grid grid-cols-3 rounded bg-[#f1eadf] p-1">
               {[
                 { id: 'code', label: '验证码' },
                 { id: 'password', label: '密码' },
@@ -140,8 +140,8 @@ export default function LoginPage({ onLogin }: Props) {
                   key={item.id}
                   type="button"
                   onClick={() => setMode(item.id as LoginMode)}
-                  className={`rounded-lg px-2 py-2 text-[13px] font-semibold transition ${
-                    mode === item.id ? 'bg-white text-stone-950 shadow-sm' : 'text-stone-500 hover:text-stone-800'
+                  className={`rounded px-2 py-2 text-[13px] font-semibold transition ${
+                    mode === item.id ? 'border border-black/10 bg-white text-stone-950' : 'text-stone-500 hover:text-stone-800'
                   }`}
                 >
                   {item.label}
@@ -159,7 +159,7 @@ export default function LoginPage({ onLogin }: Props) {
                     onChange={e => setContact(e.target.value)}
                     placeholder="请输入手机或邮箱"
                     autoComplete="email"
-                    className="mb-4 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-[14px] outline-none transition placeholder:text-stone-300 focus:border-[#8a5a35]"
+                    className="mb-4 w-full rounded border border-stone-200 bg-white px-3 py-2.5 text-[14px] outline-none transition placeholder:text-stone-300 focus:border-[#8a5a35]"
                   />
                 </label>
 
@@ -173,13 +173,13 @@ export default function LoginPage({ onLogin }: Props) {
                       onChange={e => setEmailCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                       placeholder="6 位数字"
                       autoComplete="one-time-code"
-                      className="min-w-0 rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-[14px] outline-none transition placeholder:text-stone-300 focus:border-[#8a5a35]"
+                      className="min-w-0 rounded border border-stone-200 bg-white px-3 py-2.5 text-[14px] outline-none transition placeholder:text-stone-300 focus:border-[#8a5a35]"
                     />
                     <button
                       type="button"
                       onClick={handleSendCode}
                       disabled={!canSendCode}
-                      className="rounded-xl border border-stone-200 bg-white px-2 text-[13px] font-semibold text-stone-700 transition hover:border-[#8a5a35] disabled:opacity-40"
+                      className="rounded border border-stone-200 bg-white px-2 text-[13px] font-semibold text-stone-700 transition hover:border-[#8a5a35] disabled:opacity-40"
                     >
                       {codeLoading ? '发送中' : countdown > 0 ? `${countdown}s` : '获取验证码'}
                     </button>
@@ -189,7 +189,7 @@ export default function LoginPage({ onLogin }: Props) {
                 <button
                   type="submit"
                   disabled={!canCodeLogin}
-                  className="w-full rounded-xl bg-[#2f251d] py-2.5 text-[14px] font-semibold text-white transition hover:bg-[#4a3728] disabled:opacity-40"
+                  className="w-full rounded bg-[#2f251d] py-2.5 text-[14px] font-semibold text-white transition hover:bg-[#4a3728] disabled:opacity-40"
                 >
                   {emailLoading ? '正在进入' : '登录 / 注册'}
                 </button>
@@ -207,13 +207,13 @@ export default function LoginPage({ onLogin }: Props) {
                     placeholder="请输入用户名或账号"
                     autoComplete="username"
                     name="aibrain-account-name"
-                    className="mb-4 w-full rounded-xl border border-stone-200 bg-white px-3 py-2.5 text-[14px] outline-none transition placeholder:text-stone-300 focus:border-[#8a5a35]"
+                    className="mb-4 w-full rounded border border-stone-200 bg-white px-3 py-2.5 text-[14px] outline-none transition placeholder:text-stone-300 focus:border-[#8a5a35]"
                   />
                 </label>
 
                 <label className="block">
                   <span className="mb-2 block text-[12px] font-semibold text-stone-500">密码</span>
-                  <div className="mb-4 grid grid-cols-[1fr_42px] overflow-hidden rounded-xl border border-stone-200 bg-white focus-within:border-[#8a5a35]">
+                  <div className="mb-4 grid grid-cols-[1fr_42px] overflow-hidden rounded border border-stone-200 bg-white focus-within:border-[#8a5a35]">
                     <input
                       type={showPassword ? 'text' : 'password'}
                       value={password}
@@ -249,7 +249,7 @@ export default function LoginPage({ onLogin }: Props) {
                 <button
                   type="submit"
                   disabled={!canAccountLogin}
-                  className="w-full rounded-xl bg-[#2f251d] py-2.5 text-[14px] font-semibold text-white transition hover:bg-[#4a3728] disabled:opacity-40"
+                  className="w-full rounded bg-[#2f251d] py-2.5 text-[14px] font-semibold text-white transition hover:bg-[#4a3728] disabled:opacity-40"
                 >
                   {accountLoading ? '正在进入' : '登录 / 注册'}
                 </button>
@@ -262,7 +262,7 @@ export default function LoginPage({ onLogin }: Props) {
                   type="button"
                   onClick={handleWechatLogin}
                   disabled={wechatLoading}
-                  className="grid aspect-square w-full place-items-center rounded-2xl border border-stone-200 bg-white text-stone-400 transition hover:border-[#8a5a35] disabled:opacity-40"
+                  className="grid aspect-square w-full place-items-center rounded-md border border-stone-200 bg-white text-stone-400 transition hover:border-[#8a5a35] disabled:opacity-40"
                   aria-label="扫码登录"
                 >
                   <svg viewBox="0 0 24 24" className="h-20 w-20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">

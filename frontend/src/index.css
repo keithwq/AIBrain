@@ -1,12 +1,12 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
 
 :root {
   --bg: #fafaf8;
   --surface: #ffffff;
-  --ink: #0a0a0a;
-  --ink-2: #6b7280;
-  --accent: #2563EB;
-  --font: 'PingFang SC', 'PingFang TC', 'Helvetica Neue', 'Microsoft YaHei', 'Inter', system-ui, sans-serif;
+  --ink: #37352f;
+  --ink-2: #787774;
+  --accent: #2383e2;
+  --font: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', 'DM Sans', system-ui, sans-serif;
 }
 
 body {
@@ -35,6 +35,188 @@ body {
   transform: none;
 }
 
+/* ── Notion-style light theme (qingheWriting) ── */
+.mm-page {
+  background: #f7f6f3;
+  color: #37352f;
+  font-family: var(--font);
+}
+
+.mm-header {
+  background: rgba(247, 246, 243, 0.94);
+  border-bottom: 1px solid rgba(55, 53, 47, 0.09);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.mm-aside-card {
+  background: #ffffff;
+  border: 1px solid rgba(55, 53, 47, 0.09);
+  border-radius: 6px;
+}
+
+.mm-workbench-card {
+  background: #ffffff;
+  border: 1px solid rgba(55, 53, 47, 0.09);
+  border-radius: 6px;
+}
+
+.mm-field {
+  background: #ffffff;
+  border: 1px solid rgba(55, 53, 47, 0.16);
+  border-radius: 4px;
+  color: #37352f;
+  font-family: var(--font);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.mm-field::placeholder {
+  color: #b0aca6;
+}
+
+.mm-field:focus {
+  outline: none;
+  border-color: rgba(55, 53, 47, 0.4);
+  box-shadow: 0 0 0 2px rgba(55, 53, 47, 0.06);
+}
+
+.mm-select {
+  background: #ffffff;
+  border: 1px solid rgba(55, 53, 47, 0.16);
+  border-radius: 4px;
+  color: #37352f;
+  font-family: var(--font);
+  appearance: none;
+  transition: border-color 0.12s;
+}
+
+.mm-select:focus {
+  outline: none;
+  border-color: rgba(55, 53, 47, 0.4);
+  box-shadow: 0 0 0 2px rgba(55, 53, 47, 0.06);
+}
+
+.mm-btn-primary {
+  background: #37352f;
+  color: #ffffff;
+  border-radius: 4px;
+  font-weight: 600;
+  font-family: var(--font);
+  transition: background 0.12s, opacity 0.12s;
+}
+
+.mm-btn-primary:hover:not(:disabled) {
+  background: #1f1e1b;
+}
+
+.mm-btn-primary:disabled {
+  opacity: 0.4;
+}
+
+.mm-task-active {
+  background: #f0ede8;
+  border: 1px solid rgba(55, 53, 47, 0.14);
+  border-radius: 4px;
+}
+
+.mm-task-idle {
+  background: #f7f6f3;
+  border: 1px solid rgba(55, 53, 47, 0.08);
+  border-radius: 4px;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.mm-task-idle:hover {
+  background: #f0ede8;
+  border-color: rgba(55, 53, 47, 0.14);
+}
+
+.mm-msg-user {
+  background: #37352f;
+  border-radius: 6px 6px 2px 6px;
+  color: #f7f6f3;
+}
+
+.mm-msg-ai {
+  background: #ffffff;
+  border: 1px solid rgba(55, 53, 47, 0.09);
+  border-radius: 6px 6px 6px 2px;
+  color: #37352f;
+}
+
+.mm-input-bar {
+  background: rgba(247, 246, 243, 0.94);
+  border-top: 1px solid rgba(55, 53, 47, 0.09);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.mm-input {
+  background: #ffffff;
+  border: 1px solid rgba(55, 53, 47, 0.16);
+  border-radius: 4px;
+  color: #37352f;
+  font-family: var(--font);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+
+.mm-input::placeholder {
+  color: #b0aca6;
+}
+
+.mm-input:focus {
+  outline: none;
+  border-color: rgba(55, 53, 47, 0.4);
+  box-shadow: 0 0 0 2px rgba(55, 53, 47, 0.06);
+}
+
+.mm-icon-btn {
+  background: #ffffff;
+  border: 1px solid rgba(55, 53, 47, 0.16);
+  border-radius: 4px;
+  color: #787774;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+}
+
+.mm-icon-btn:hover:not(:disabled) {
+  background: #f0ede8;
+  border-color: rgba(55, 53, 47, 0.3);
+  color: #37352f;
+}
+
+.mm-icon-btn:disabled {
+  opacity: 0.4;
+}
+
+.mm-send-btn {
+  background: #37352f;
+  border-radius: 4px;
+  color: #ffffff;
+  transition: background 0.12s, opacity 0.12s;
+}
+
+.mm-send-btn:hover:not(:disabled) {
+  background: #1f1e1b;
+}
+
+.mm-send-btn:disabled {
+  opacity: 0.4;
+}
+
+.mm-info-block {
+  background: #f7f6f3;
+  border: 1px solid rgba(55, 53, 47, 0.08);
+  border-radius: 4px;
+}
+
+.mm-svip-block {
+  background: #fffbeb;
+  border: 1px solid rgba(180, 140, 0, 0.18);
+  border-radius: 4px;
+  color: #7a5c00;
+}
+
+/* ── message-rich ── */
 .message-rich {
   overflow-wrap: anywhere;
 }
@@ -48,47 +230,67 @@ body {
   margin: 0.5rem 0;
 }
 
-.message-rich p:first-child {
-  margin-top: 0;
-}
-
-.message-rich p:last-child {
-  margin-bottom: 0;
-}
+.message-rich p:first-child { margin-top: 0; }
+.message-rich p:last-child  { margin-bottom: 0; }
 
 .message-rich a {
-  color: #047857;
-  font-weight: 700;
+  color: #2383e2;
+  font-weight: 600;
   text-decoration: underline;
 }
 
 .message-rich-dark a {
-  color: #d1fae5;
+  color: rgba(247, 246, 243, 0.65);
 }
 
 .message-rich img {
   max-height: 360px;
   max-width: 100%;
-  border-radius: 16px;
-  border: 1px solid rgba(120, 113, 108, 0.25);
+  border-radius: 4px;
+  border: 1px solid rgba(55, 53, 47, 0.1);
   object-fit: contain;
 }
 
 .message-rich code {
-  border-radius: 8px;
-  background: rgba(120, 113, 108, 0.12);
-  padding: 0.1rem 0.35rem;
+  border-radius: 3px;
+  background: rgba(55, 53, 47, 0.07);
+  padding: 0.1rem 0.3rem;
+  font-size: 0.85em;
 }
 
 .message-rich pre {
   overflow-x: auto;
-  border-radius: 14px;
-  background: #1c1917;
+  border-radius: 4px;
+  background: #f7f6f3;
+  border: 1px solid rgba(55, 53, 47, 0.1);
   padding: 0.75rem;
-  color: #fafaf9;
+  color: #37352f;
 }
 
 .message-rich pre code {
   background: transparent;
   padding: 0;
 }
+
+.yxcs-theme.mm-page { background: #f5f7f5; color: #2d3a2e; }
+.yxcs-theme .mm-header { background: rgba(245, 247, 245, 0.94); border-bottom: 1px solid rgba(45, 58, 46, 0.09); }
+.yxcs-theme .mm-task-active { background: #eaf0ea; border-color: rgba(45, 58, 46, 0.14); }
+.yxcs-theme .mm-task-idle { background: #f5f7f5; border-color: rgba(45, 58, 46, 0.08); }
+.yxcs-theme .mm-task-idle:hover { background: #eaf0ea; }
+.yxcs-theme .mm-btn-primary { background: #2d3a2e; }
+.yxcs-theme .mm-btn-primary:hover:not(:disabled) { background: #1e2820; }
+.yxcs-theme .mm-send-btn { background: #2d3a2e; }
+.yxcs-theme .mm-send-btn:hover:not(:disabled) { background: #1e2820; }
+.yxcs-theme .mm-msg-user { background: #2d3a2e; color: #f5f7f5; }
+.yxcs-theme .mm-input-bar { background: rgba(245, 247, 245, 0.94); border-top: 1px solid rgba(45, 58, 46, 0.09); }
+.yxcs-theme .mm-aside-card { border-color: rgba(45, 58, 46, 0.09); }
+.yxcs-theme .mm-workbench-card { border-color: rgba(45, 58, 46, 0.09); }
+.yxcs-theme .mm-field { border-color: rgba(45, 58, 46, 0.16); color: #2d3a2e; }
+.yxcs-theme .mm-field:focus { border-color: rgba(45, 58, 46, 0.4); box-shadow: 0 0 0 2px rgba(45, 58, 46, 0.06); }
+.yxcs-theme .mm-select { border-color: rgba(45, 58, 46, 0.16); color: #2d3a2e; }
+.yxcs-theme .mm-input { border-color: rgba(45, 58, 46, 0.16); color: #2d3a2e; }
+.yxcs-theme .mm-input:focus { border-color: rgba(45, 58, 46, 0.4); box-shadow: 0 0 0 2px rgba(45, 58, 46, 0.06); }
+.yxcs-theme .mm-icon-btn { border-color: rgba(45, 58, 46, 0.16); color: #5a7a5c; }
+.yxcs-theme .mm-icon-btn:hover:not(:disabled) { background: #eaf0ea; border-color: rgba(45, 58, 46, 0.3); color: #2d3a2e; }
+.yxcs-theme .message-rich a { color: #3a7a4a; }
+.yxcs-theme .mm-info-block { background: #f5f7f5; border-color: rgba(45, 58, 46, 0.08); }

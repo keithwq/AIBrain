@@ -1,4 +1,4 @@
-export interface ExpertCategory {
+﻿export interface ExpertCategory {
   id: string;
   name: string;
   description: string;
@@ -8,57 +8,27 @@ export interface ExpertCategory {
 export const EXPERT_CATEGORIES: ExpertCategory[] = [
   {
     id: 'education',
-    name: '教培机构',
-    description: '语文 / 升学 / 教研 / 校区',
-    expertIds: ['wangdingjun', 'wangrongsheng', 'sunshaozhen', 'yejiaying', 'zhangxuefeng'],
+    name: '����ѧϰ',
+    description: '���� / ��ѧ / ��ѧ / ���',
+    expertIds: ['qinghe-xiezuo', 'yunqiao-jiaoxue', 'songyue-shici', 'zhiyuan-laoshi'],
   },
   {
     id: 'family',
-    name: '家庭教育',
-    description: '心理抚养 / 亲子 / 成长边界',
-    expertIds: ['li-meijin'],
+    name: '��ͥ����',
+    description: '��ͥ���� / ���� / ״̬���� / ��ͨ����',
+    expertIds: ['muhe-laoshi', 'anran-laoshi'],
   },
   {
     id: 'business',
-    name: '商业增长',
-    description: '战略 / 营销 / 组织',
-    expertIds: ['wangzhigang', 'yemaozhong', 'mayun'],
-  },
-  {
-    id: 'product',
-    name: '产品创业',
-    description: '产品 / 表达 / 实验',
-    expertIds: ['steve-jobs', 'luoyonghao', 'masike'],
-  },
-  {
-    id: 'legal',
-    name: '法律避坑',
-    description: '合同 / 证据 / 别踩坑',
-    expertIds: ['kuangtuzhangsan'],
+    name: '��ҵְ��',
+    description: 'ս�� / Ӫ�� / ��Ʒ / �Ϲ�',
+    expertIds: ['mingfeng-guwen', 'lishi-sir', 'mingheng-fawu'],
   },
   {
     id: 'health',
-    name: '健康医疗',
-    description: '肠道 / 磁医学 / 医学沟通',
-    expertIds: ['xuehuashi', 'zhanqimin'],
-  },
-  {
-    id: 'mindfulness',
-    name: '正念支持',
-    description: '呼吸 / 情绪安顿 / 当下觉察',
-    expertIds: ['yixingchanshi'],
-  },
-  {
-    id: 'structure',
-    name: '结构分析',
-    description: '制度 / 城乡 / 产业',
-    expertIds: ['wentiejun'],
-  },
-  {
-    id: 'knowledge',
-    name: '知识表达',
-    description: '读书 / 课程 / 表达',
-    expertIds: ['fandeng'],
+    name: '����',
+    description: '��ҽ���� / ������Ϣ���� / ҽѧ��ͨ',
+    expertIds: ['songbai-xiansheng'],
   },
 ];
 

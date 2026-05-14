@@ -66,8 +66,9 @@ export async function getWechatLoginUrl() {
   return res.json();
 }
 
-export async function getExperts() {
-  const res = await fetch(`${BASE_URL}/experts`);
+export async function getExperts(token?: string) {
+  const headers = token ? { 'x-auth-token': token } : undefined;
+  const res = await fetch(`${BASE_URL}/experts`, { headers });
   if (!res.ok) throw new Error('failed to load experts');
   return res.json();
 }
@@ -78,7 +79,7 @@ export async function createConversation(token: string, expertId: string, title?
     headers: authHeaders(token),
     body: JSON.stringify({ expert_id: expertId, title }),
   });
-  if (!res.ok) throw new Error('failed to create conversation');
+  if (!res.ok) throw new ApiError(res.status, 'failed to create conversation');
   return res.json();
 }
 
@@ -211,7 +212,7 @@ export async function getCredits(token: string) {
   const res = await fetch(`${BASE_URL}/users/me/credits`, {
     headers: { 'x-auth-token': token },
   });
-  if (!res.ok) throw new Error('failed to load credits');
+  if (!res.ok) throw new ApiError(res.status, 'failed to load credits');
   return res.json();
 }
 
