@@ -142,7 +142,16 @@ export async function uploadAttachments(token: string, conversationId: string, f
     headers: { 'x-auth-token': token },
     body: form,
   });
-  if (!res.ok) throw new Error('附件上传失败，请换一个文件试试。');
+  if (!res.ok) {
+    let message = '附件上传失败，请换一个文件试试。';
+    try {
+      const data = await res.json();
+      if (typeof data.error === 'string') message = data.error;
+    } catch {
+      // keep default message
+    }
+    throw new Error(message);
+  }
   const data = await res.json();
   return data.attachments || [];
 }

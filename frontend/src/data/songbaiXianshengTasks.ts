@@ -130,7 +130,7 @@ export const SONGBAI_XIANSHENG_TASKS: SongbaiXianshengTask[] = [
   },
   {
     id: 'constitution',
-    label: '体质档案',
+    label: '体质辨识',
     hint: '体质辨识与档案管理',
     title: '体质辨识与档案管理',
     intro: '通过问卷整理日常状态，建立和更新个人体质档案。',

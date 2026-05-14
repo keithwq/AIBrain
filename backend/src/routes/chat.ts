@@ -13,7 +13,7 @@ import { isExpertAllowedForNickname } from '../services/expertAccess';
 
 const router = Router();
 const UPLOAD_DIR = path.resolve(process.cwd(), 'uploads');
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const MAX_ATTACHMENTS_PER_MESSAGE = 6;
 const MAX_MESSAGE_LENGTH = 12000;
 
@@ -24,6 +24,8 @@ const allowedMimeTypes = new Set([
   'image/png',
   'image/webp',
   'image/gif',
+  'image/heic',
+  'image/heif',
   'application/pdf',
   'text/plain',
   'text/markdown',
@@ -41,7 +43,9 @@ const upload = multer({
   }),
   limits: { fileSize: MAX_FILE_SIZE },
   fileFilter: (_req, file, cb) => {
-    if (!allowedMimeTypes.has(file.mimetype)) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const looksLikeImage = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif'].includes(ext);
+    if (!allowedMimeTypes.has(file.mimetype) && !looksLikeImage) {
       cb(new Error('unsupported file type'));
       return;
     }
@@ -205,7 +209,19 @@ router.get('/conversations/:id/messages', async (req, res) => {
   })));
 });
 
-router.post('/conversations/:id/attachments', upload.array('files', MAX_ATTACHMENTS_PER_MESSAGE), async (req, res) => {
+router.post('/conversations/:id/attachments', (req, res, next) => {
+  upload.array('files', MAX_ATTACHMENTS_PER_MESSAGE)(req, res, error => {
+    if (!error) {
+      next();
+      return;
+    }
+    if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+      res.status(413).json({ error: '照片太大，请换一张 25MB 以内的图片。' });
+      return;
+    }
+    res.status(400).json({ error: '文件格式暂不支持，请上传 JPG、PNG、WEBP、HEIC 或 PDF/Word/TXT。' });
+  });
+}, async (req, res) => {
   const user = res.locals.user;
   const conversationId = String(req.params.id);
   const conversation = await prisma.conversation.findUnique({ where: { id: conversationId } });

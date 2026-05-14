@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 interface Props {
   content: string;
   streaming: boolean;
+  renderMessageText?: (content: string) => React.ReactNode;
 }
 
 interface DayMenu {
@@ -51,7 +52,7 @@ function parseWeeklyMenu(content: string): { days: DayMenu[]; shoppingList: stri
   return { days, shoppingList, tips };
 }
 
-export function WeeklyMenuView({ content, streaming }: Props) {
+export function WeeklyMenuView({ content, streaming, renderMessageText }: Props) {
   const data = useMemo(() => parseWeeklyMenu(content), [content]);
 
   if (!content && !streaming) {
@@ -75,8 +76,8 @@ export function WeeklyMenuView({ content, streaming }: Props) {
 
   if (data.days.length === 0) {
     return (
-      <div className="h-full overflow-y-auto p-4 text-xs leading-6 text-stone-700 whitespace-pre-wrap">
-        {content}
+      <div className="h-full overflow-y-auto p-4 text-xs leading-6 text-stone-700">
+        {renderMessageText ? renderMessageText(content) : <div className="whitespace-pre-wrap">{content}</div>}
       </div>
     );
   }
@@ -107,14 +108,18 @@ export function WeeklyMenuView({ content, streaming }: Props) {
       {data.shoppingList && (
         <div className="mt-4 rounded-md border border-black/8 bg-[var(--bg)] p-3">
           <p className="text-[11px] font-semibold text-[#8a5a35]">采购清单</p>
-          <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-stone-700">{data.shoppingList}</p>
+          <div className="mt-1 text-xs leading-5 text-stone-700">
+            {renderMessageText ? renderMessageText(data.shoppingList) : <p className="whitespace-pre-wrap">{data.shoppingList}</p>}
+          </div>
         </div>
       )}
 
       {data.tips && (
         <div className="mt-3 rounded-md border border-black/8 bg-[var(--bg)] p-3">
           <p className="text-[11px] font-semibold text-stone-600">备餐建议</p>
-          <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-stone-700">{data.tips}</p>
+          <div className="mt-1 text-xs leading-5 text-stone-700">
+            {renderMessageText ? renderMessageText(data.tips) : <p className="whitespace-pre-wrap">{data.tips}</p>}
+          </div>
         </div>
       )}
 

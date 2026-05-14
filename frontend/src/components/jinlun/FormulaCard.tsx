@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 interface Props {
   content: string;
   streaming: boolean;
+  renderMessageText?: (content: string) => React.ReactNode;
 }
 
 interface FormulaData {
@@ -50,7 +51,7 @@ const SECTION_CONFIG: Array<{ key: keyof FormulaData; label: string; color: stri
   { key: 'cautions', label: '注意事项', color: 'text-red-700' },
 ];
 
-export function FormulaCard({ content, streaming }: Props) {
+export function FormulaCard({ content, streaming, renderMessageText }: Props) {
   const data = useMemo(() => parseFormula(content), [content]);
 
   if (!data) {
@@ -78,7 +79,9 @@ export function FormulaCard({ content, streaming }: Props) {
           return (
             <div key={key} className="rounded-md border border-black/8 bg-[var(--bg)] p-3">
               <p className={`text-[11px] font-semibold ${color}`}>{label}</p>
-              <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-stone-700">{value}</p>
+              <div className="mt-1 text-xs leading-5 text-stone-700">
+                {renderMessageText ? renderMessageText(value) : <p className="whitespace-pre-wrap">{value}</p>}
+              </div>
             </div>
           );
         })}
