@@ -1,57 +1,82 @@
-# 部署验收清单
+# Deployment Checklist
 
-## 目标状态
+## Required Environment
 
-线上环境至少要保证四件事：
+Set these in production before starting the stack:
 
-- 后端、前端、PostgreSQL 能稳定启动
-- 后端能读取项目内 `backend/personas/*/SKILL.md`
-- 登录、选专家、发消息、历史记录、配额扣减这条主链路可用
-- 生产域名已经写入 `CORS_ORIGIN`
-
-## 必填环境变量
-
-后端：
-
+    DEEPSEEK_API_KEY=...
     DATABASE_URL=postgresql://aibrain:aibrain@postgres:5432/aibrain?schema=public
-    DEEPSEEK_API_KEY=你的 DeepSeek Key
-    PORT=3001
-    CORS_ORIGIN=https://你的前端域名
+    CORS_ORIGIN=https://your-domain.example
+    PUBLIC_ORIGIN=https://your-domain.example
+    FRONTEND_ORIGIN=https://your-domain.example
+    EMAIL_CODE_SECRET=<long-random-secret>
+    LOGIN_PASSWORD_SECRET=<long-random-secret>
+    ALLOW_PRESET_TEST_USERS=false
+    ALLOW_NICKNAME_LOGIN=false
 
-可选：
+Optional login integrations:
 
-    PERSONA_BASE_PATH=/app/personas
+    SMTP_HOST=...
+    SMTP_PORT=465
+    SMTP_SECURE=true
+    SMTP_USER=...
+    SMTP_PASS=...
+    SMTP_FROM=...
+    WECHAT_APP_ID=...
+    WECHAT_APP_SECRET=...
+    WECHAT_REDIRECT_URI=https://your-domain.example/api/v1/auth/wechat/callback
+    WECHAT_STATE_SECRET=<long-random-secret>
 
-默认已经读取镜像内 `/app/personas`，只有外接独立知识库时才需要改 `PERSONA_BASE_PATH`。
+## Release Gate
 
-## 上线前检查
+Run these before deployment:
 
-1. 启动服务：
+    cd backend
+    npx prisma validate
+    npx prisma migrate status
+    npm run build
+    npm test
 
-        docker-compose up --build
+    cd ../frontend
+    npm run lint
+    npm run build
 
-2. 检查后端健康接口：
+`npx prisma migrate status` must report that the database schema is up to date.
 
-        http://服务器地址:3001/api/v1/health
+## Deployment
 
-3. 检查专家列表：
+Use migrations, not schema push:
 
-        http://服务器地址:3001/api/v1/experts
+    docker-compose up --build -d
 
-   每个已上线专家应返回 `has_skill: true`。
+The backend image starts with:
 
-4. 前端主流程验收：
+    npx prisma migrate deploy && npm start
 
-   登录 -> 选择专家 -> 发送消息 -> 收到 AI 回复 -> 返回专家页 -> 打开历史对话。
+Do not use `prisma db push --accept-data-loss` in production.
 
-5. 配额验收：
+## Smoke Test
 
-   发送消息后剩余次数减少；配额为 0 时，前端禁止继续发送，后端拒绝继续扣费对话。
+After deployment:
 
-## 不允许上线的情况
+    GET https://your-domain.example/api/v1/health
+    GET https://your-domain.example/api/v1/experts
 
-- 后端启动依赖本机 `D:\WIKI` 路径
-- Docker 镜像内缺少 `personas`
-- `.env` 被打进镜像
-- 没有配置生产 `CORS_ORIGIN`
-- 没有配置 `DEEPSEEK_API_KEY` 却验收聊天主链路
+Then verify the main product path:
+
+    Login -> choose expert -> send message -> receive reply -> return to experts -> reopen conversation
+
+Also verify quota behavior:
+
+    Message send decrements credits.
+    Zero credits blocks new paid messages in both frontend and backend.
+
+## Must Not Ship
+
+- `ALLOW_PRESET_TEST_USERS=true`
+- `ALLOW_NICKNAME_LOGIN=true`
+- localhost-only `CORS_ORIGIN`, `PUBLIC_ORIGIN`, or `FRONTEND_ORIGIN`
+- missing `DEEPSEEK_API_KEY`
+- missing production secrets
+- `.env` files copied into images or committed to git
+- runtime logs, `.tmp-*` files, `.cursor/`, or `.playwright-mcp/` in the release diff

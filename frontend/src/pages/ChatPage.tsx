@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
@@ -9,7 +9,7 @@ import { getExpertDisplay } from '../data/experts';
 import { DEFAULT_MINGHENG_FAWU_TASK, MINGHENG_FAWU_TASKS, getMinghengFawuTask, type MinghengFawuTaskId } from '../data/minghengFawuTasks';
 import { AnranLaoshiTaskPicker } from '../components/AnranLaoshiTaskPicker';
 import { DEFAULT_ANRAN_LAOSHI_TASK, getDefaultAnranLaoshiSubOption, getAnranLaoshiTask, type AnranLaoshiTaskId } from '../data/anranLaoshiTasks';
-import { buildAnranLaoshiMessage, getAnranLaoshiWorkbenchCopy, type AnranLaoshiFieldKey, type AnranLaoshiWorkbenchValues } from '../data/anranLaoshiWorkbench';
+import { buildAnranLaoshiMessage, getAnranLaoshiWorkbenchCopy } from '../data/anranLaoshiWorkbench';
 import { SongbaiXianshengWorkbench, type SongbaiXianshengValues } from '../components/SongbaiXianshengWorkbench';
 import { DEFAULT_SONGBAI_XIANSHENG_TASK, getSongbaiXianshengTask, type SongbaiXianshengTaskId } from '../data/songbaiXianshengTasks';
 import { MuheLaoshiWorkbench, type MuheLaoshiValues } from '../components/MuheLaoshiWorkbench';
@@ -35,15 +35,6 @@ interface Props {
 
 const TEMP_ID_PREFIX = 'temp-';
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
 function sanitizeFileName(value: string): string {
   return value
     .trim()
@@ -53,13 +44,152 @@ function sanitizeFileName(value: string): string {
     .slice(0, 40) || 'aibrain';
 }
 
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+const CRC32_TABLE = Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) {
+    value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  }
+  return value >>> 0;
+});
+
+function crc32(bytes: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc = CRC32_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function dosDateTime(date: Date) {
+  return {
+    time: (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2),
+    date: ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate(),
+  };
+}
+
+function writeUint16(target: number[], value: number) {
+  target.push(value & 0xff, (value >>> 8) & 0xff);
+}
+
+function writeUint32(target: number[], value: number) {
+  target.push(value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff, (value >>> 24) & 0xff);
+}
+
+function appendBytes(target: number[], bytes: Uint8Array) {
+  for (const byte of bytes) target.push(byte);
+}
+
+function createStoredZip(entries: Array<{ name: string; content: string }>): Uint8Array {
+  const encoder = new TextEncoder();
+  const now = dosDateTime(new Date());
+  const fileBytes: number[] = [];
+  const centralDirectory: number[] = [];
+
+  for (const entry of entries) {
+    const nameBytes = encoder.encode(entry.name);
+    const contentBytes = encoder.encode(entry.content);
+    const checksum = crc32(contentBytes);
+    const localHeaderOffset = fileBytes.length;
+
+    writeUint32(fileBytes, 0x04034b50);
+    writeUint16(fileBytes, 20);
+    writeUint16(fileBytes, 0x0800);
+    writeUint16(fileBytes, 0);
+    writeUint16(fileBytes, now.time);
+    writeUint16(fileBytes, now.date);
+    writeUint32(fileBytes, checksum);
+    writeUint32(fileBytes, contentBytes.length);
+    writeUint32(fileBytes, contentBytes.length);
+    writeUint16(fileBytes, nameBytes.length);
+    writeUint16(fileBytes, 0);
+    appendBytes(fileBytes, nameBytes);
+    appendBytes(fileBytes, contentBytes);
+
+    writeUint32(centralDirectory, 0x02014b50);
+    writeUint16(centralDirectory, 20);
+    writeUint16(centralDirectory, 20);
+    writeUint16(centralDirectory, 0x0800);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, now.time);
+    writeUint16(centralDirectory, now.date);
+    writeUint32(centralDirectory, checksum);
+    writeUint32(centralDirectory, contentBytes.length);
+    writeUint32(centralDirectory, contentBytes.length);
+    writeUint16(centralDirectory, nameBytes.length);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint16(centralDirectory, 0);
+    writeUint32(centralDirectory, 0);
+    writeUint32(centralDirectory, localHeaderOffset);
+    appendBytes(centralDirectory, nameBytes);
+  }
+
+  const centralDirectoryOffset = fileBytes.length;
+  fileBytes.push(...centralDirectory);
+  writeUint32(fileBytes, 0x06054b50);
+  writeUint16(fileBytes, 0);
+  writeUint16(fileBytes, 0);
+  writeUint16(fileBytes, entries.length);
+  writeUint16(fileBytes, entries.length);
+  writeUint32(fileBytes, centralDirectory.length);
+  writeUint32(fileBytes, centralDirectoryOffset);
+  writeUint16(fileBytes, 0);
+
+  return new Uint8Array(fileBytes);
+}
+
+function buildWordDocumentXml(title: string, content: string): string {
+  const paragraphs = [title, '', ...content.replace(/\r\n/g, '\n').split('\n')].map(line => {
+    const text = escapeXml(line || ' ');
+    return `<w:p><w:r><w:t xml:space="preserve">${text}</w:t></w:r></w:p>`;
+  }).join('');
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:body>
+    ${paragraphs}
+    <w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/></w:sectPr>
+  </w:body>
+</w:document>`;
+}
+
 function downloadWordDocument(title: string, content: string) {
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head><body style="font-family:Arial,Helvetica,sans-serif;font-size:12pt;line-height:1.7;"><h1 style="font-size:18pt;margin:0 0 16px;">${escapeHtml(title)}</h1><div style="white-space:pre-wrap;">${escapeHtml(content)}</div></body></html>`;
-  const blob = new Blob([`\ufeff${html}`], { type: 'application/msword;charset=utf-8' });
+  const documentXml = buildWordDocumentXml(title, content);
+  const bytes = createStoredZip([
+    {
+      name: '[Content_Types].xml',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`,
+    },
+    {
+      name: '_rels/.rels',
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`,
+    },
+    { name: 'word/document.xml', content: documentXml },
+  ]);
+  const docxBuffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  const blob = new Blob([docxBuffer], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `${sanitizeFileName(title)}.doc`;
+  link.download = `${sanitizeFileName(title)}.docx`;
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -67,74 +197,267 @@ function downloadWordDocument(title: string, content: string) {
 }
 
 const QUICK_QUESTIONS = [
-  '�Ȱ����ж��������Ĺؼ�������',
-  '�������ϴ��Ĳ��ϣ�����һ���ж��嵥��',
-  '��ѽ����ñ�����������',
+  '先帮我判断这个问题的关键变量。',
+  '根据我上传的材料，给我一份行动清单。',
+  '请把结论用表格整理出来。',
 ];
 
 const MINDFULNESS_QUESTIONS = [
-  '�����ںܽ��ǣ��ȴ�����һ�� 3 ���Ӻ�����ϰ��',
-  '������ͣ��������������˯ǰ���١�',
-  '�Һܷ��꣬���Ұ����������������������',
+  '我现在很焦虑，先带我做一个 3 分钟呼吸练习。',
+  '我脑子停不下来，帮我做睡前安顿。',
+  '我很烦躁，帮我把身体和情绪慢慢放下来。',
 ];
 
 const QINGHE_WRITING_QUESTIONS = [
-  '�밴��������ơ����Ѿ䡢�����ӡ���һ�������ҿ�����ƪ���ġ�',
-  '�����Щ����������һ�ڿ��ϿεĽ����Ρ�',
-  '�밴���д���������زİ��������˵�θ塣',
-  '��������ϴ������ϣ�����һ����øĸ塣',
+  '请帮我批改这篇作文，给学生、老师、家长三个版本。',
+  '请把这些共性问题整理成一节作文讲评课。',
+  '请围绕这个主题整理一组写作素材和课堂练习。',
+  '请按这个训练目标设计作文题和分层练习。',
 ];
 
 const YUNQIAO_JIAOXUE_QUESTIONS = [
-  '�����ڿ������һ�����ϿεĽ̰���',
-  '���������˵�θ壬�ص�˵����ѧ����ѡ�����ݡ�',
-  '�����ݱ��β��ϸĳɿ������ָ塣',
-  '�����ҵĽ̰�Ŀ�ꡢ���ݡ���������Ƿ�һ�¡�',
+  '请把这节课整理成一份能上课的教案。',
+  '请帮我生成说课稿，重点说明教学内容选择的理据。',
+  '请把这份备课材料改成课堂逐字稿。',
+  '请检查我的教案目标、内容、活动、评价是否一致。',
 ];
 
 const SONGYUE_SHICI_QUESTIONS = [
-  '����ҽ�������ʫ���ȴ��ж����������֡�',
-  '������״������һ�ڿ��Ͽε�����������',
-  '��˵������ʫ�ʵ�����������˷��ж���',
-  '�������ʫ�ʵĵ�ʲ�췽�򣬲�Ҫ������֪ʶ��',
+  '请带我讲读这首诗，先从诵读和声情入手。',
+  '请把这首词整理成一节可上课的主问题链。',
+  '请说明这组诗词的意象脉络和兴发感动。',
+  '请给这首诗词的典故查检方向，不要泛泛堆知识。',
 ];
 
-const BINGSHAN_QUESTIONS = [
-  '���ҹ滮����·��������Ӳ�������ٸ�־Ը����',
-  '����ЩѧУ��רҵ�ֳɳ塢�ȡ����������ĵ���',
-  '����ͨ��ͥ�ر��߼����ж�������ѧ·��ֵ��ֵ��',
-  '�Ӿ�ҵ���ڵ��ƣ����רҵ�м�50%���������ȥ�ġ�',
-  '����ת�У���ѧ�������䡢�ֽ����Ϳ���������ܲ��ܸɡ�',
-  '���Ȱ���ֱ�Ӹ��������ѡ�����Ŀ���ʲô��',
+const ZHIYUAN_QUESTIONS = [
+  '请帮我判断这张志愿表的冲稳保是否合理。',
+  '这些学校和专业，哪些是稳、哪些风险大？',
+  '普通家庭要不要走留学路线，请先算回本线。',
+  '从就业出口倒推，这个专业值得选吗？',
+  '考研、就业、转专业这几条路哪条更现实？',
+  '请直接列出我应该避开的选择。',
 ];
 
 const PRECONSULT_OUTPUT_STRUCTURE = [
-  '�����ж�',
-  '��ʵ������չ',
-  '֤���嵥',
-  '���ձ߽�',
-  '��һ������·��',
-  '���ύ���ϻ�ͨ�ı�',
-  'רҵȷ���嵥',
+  '初步判断',
+  '事实与程序进展',
+  '证据清单',
+  '风险边界',
+  '下一步处理路径',
+  '可提交材料或沟通文本',
+  '专业确认清单',
 ];
 
-type TeacherBoardId = 'correction' | 'preparation';
+type QingheWorkId =
+  | 'correction-pack'
+  | 'review-lesson'
+  | 'lesson-plan'
+  | 'handout'
+  | 'ppt-outline'
+  | 'teaching-script'
+  | 'speaking-note'
+  | 'worksheet'
+  | 'prompt-set'
+  | 'material-pack'
+  | 'material-transform'
+  | 'course-plan'
+  | 'parent-note'
+  | 'teaching-review';
+
+const QINGHE_WORKS: Array<{
+  id: QingheWorkId;
+  group: string;
+  label: string;
+  title: string;
+  hint: string;
+  button: string;
+  output: string;
+  prompt: string;
+  structure: string[];
+}> = [
+  {
+    id: 'correction-pack',
+    group: '批改讲评',
+    label: '批改稿',
+    title: '生成学生能改、老师能讲、家长能懂的批改稿',
+    hint: '单篇作文、考场作文、日常习作',
+    button: '生成批改稿',
+    output: '学生反馈 + 教师说明 + 家长短话 + 下一稿任务',
+    prompt: '请完成作文批改交付。先读题干限制，再依据学生原文判断本轮最值得改的一处。输出学生能动笔修改、老师能讲评、家长能理解的批改稿。旁批必须是动作，不要替学生写整篇可提交作文，不承诺官方分数。',
+    structure: ['题目与场景判断', '学生版反馈', '教师版说明', '家长版短话', '下一稿任务', '文学表达与应试风险'],
+  },
+  {
+    id: 'review-lesson',
+    group: '批改讲评',
+    label: '讲评课',
+    title: '把一批作文或共性问题转成可上课的讲评方案',
+    hint: '讲评目标、例句、微练、作业闭环',
+    button: '生成讲评方案',
+    output: '讲评流程 + 可投影句 + 当堂微练 + 课后作业',
+    prompt: '请完成作文讲评课交付。从样本、批改记录或老师描述中提炼本轮最值得讲的一件事，把问题转成学生可练的写作动作。不要写成泛泛教案。',
+    structure: ['讲评目标', '材料取舍', '可投影句', '示范修改', '当堂微练', '作业闭环', '下一轮跟进'],
+  },
+  {
+    id: 'lesson-plan',
+    group: '课堂文本',
+    label: '教案',
+    title: '生成一份作文课或讲评课教案',
+    hint: '目标、重难点、流程、板书、作业',
+    button: '生成教案',
+    output: '教案 + 板书 + 作业 + 反思留白',
+    prompt: '请生成作文教学教案。先判断这节课训练哪一个写作动作，再组织教学目标、重难点、课堂流程、学生任务、板书和作业。不要默认老师已经有完整教案。',
+    structure: ['教学目标', '重难点', '教学准备', '课堂流程', '学生任务', '板书设计', '作业与反思'],
+  },
+  {
+    id: 'handout',
+    group: '课堂文本',
+    label: '讲义',
+    title: '生成学生可直接使用的作文讲义',
+    hint: '审题提示、示范片段、练笔留白',
+    button: '生成讲义',
+    output: '学生讲义 + 动笔空位 + 自评清单',
+    prompt: '请生成学生讲义。内容要服务本次写作训练，包含审题提示、示范片段、动手练习、修改任务和自评清单。示范只给片段，不代写整篇作文。',
+    structure: ['本课目标', '题目回顾', '审题提示', '示范片段', '动手练习', '下一稿任务', '自评清单'],
+  },
+  {
+    id: 'ppt-outline',
+    group: '课堂文本',
+    label: '课件骨架',
+    title: '生成 8 到 12 页作文课件骨架',
+    hint: '每页标题、要点、过渡语',
+    button: '生成课件骨架',
+    output: 'PPT 页纲 + 板书提示 + 过渡语',
+    prompt: '请生成作文课件骨架。每页给标题、要点、教师过渡语和板书提示。课件要围绕一个清楚的写作训练动作推进。',
+    structure: ['首页导入', '共性问题', '例句对比', '示范修改', '课堂小练', '学生展示', '作业任务'],
+  },
+  {
+    id: 'teaching-script',
+    group: '课堂文本',
+    label: '逐字稿',
+    title: '生成作文课堂逐字稿',
+    hint: '教师话术、提问、停顿、转场',
+    button: '生成逐字稿',
+    output: '10 到 15 分钟课堂逐字稿',
+    prompt: '请生成作文课堂逐字稿。用老师第一人称，包含过渡语、提问、停顿、板书提示和学生动作。不要编造学生回答。',
+    structure: ['开场导入', '材料呈现', '问题指出', '示范修改', '学生练习', '总结与作业'],
+  },
+  {
+    id: 'speaking-note',
+    group: '课堂文本',
+    label: '说课稿',
+    title: '生成作文课说课稿或磨课说明',
+    hint: '教学依据、流程说明、设计理由',
+    button: '生成说课稿',
+    output: '说课稿 + 设计理由 + 磨课提示',
+    prompt: '请生成作文课说课稿或磨课说明。说明本课为什么这样教、训练哪一个写作动作、怎样组织学生练习，以及如何判断课堂是否有效。不要写成空泛套话。',
+    structure: ['课题与对象', '教学依据', '目标与重难点', '流程说明', '设计理由', '评价方式', '磨课提示'],
+  },
+  {
+    id: 'worksheet',
+    group: '课堂文本',
+    label: '学案/练习单',
+    title: '生成课堂学案或随堂练习单',
+    hint: '导学问题、任务、打勾清单',
+    button: '生成学案',
+    output: '导学问题 + 课堂任务 + 自评清单',
+    prompt: '请生成作文课堂学案或练习单。把训练目标拆成学生能完成的任务，保留动笔空间和自评标准。',
+    structure: ['导学问题', '课堂任务', '练笔空间', '互评规则', '自评清单', '课后任务'],
+  },
+  {
+    id: 'prompt-set',
+    group: '题目素材',
+    label: '作文题',
+    title: '设计作文题、周测、专项训练和分层任务',
+    hint: '月考、周测、补差、提优',
+    button: '生成题目',
+    output: '题目 + 命题说明 + 评分参考 + 使用建议',
+    prompt: '请完成写作出题交付。根据训练目标、年级、学生水平和使用场景生成作文题、微写作、周测或专项训练。说明考查能力、限制条件、常见跑偏和课堂使用建议，不冒充官方命题组。',
+    structure: ['训练目标', '题目或任务', '命题说明', '常见跑偏', '评分参考', '课堂使用建议'],
+  },
+  {
+    id: 'material-pack',
+    group: '题目素材',
+    label: '素材包',
+    title: '生成或整理写作素材包',
+    hint: '主题素材、人物事例、意象细节、金句',
+    button: '生成素材包',
+    output: '主题素材包 + 使用角度 + 练习方式',
+    prompt: '请完成写作素材交付。素材不是堆名人名言，要转化为学生可用的表达动作、片段练习或课堂任务。不编造具体事实。',
+    structure: ['素材分类', '可用角度', '文体适配', '使用风险', '课堂练习', '学生卡片版'],
+  },
+  {
+    id: 'course-plan',
+    group: '课程教研',
+    label: '课程体系',
+    title: '新建、整理或改造写作课程体系',
+    hint: '长期班、短期班、单元训练、参考课程整理',
+    button: '生成课程体系',
+    output: '课程地图 + 课次安排 + 每课训练任务',
+    prompt: '请完成写作课程体系交付。先判断是从零新建、整理已有课程，还是参考其他老师课程后重构。每一课都要落到一个可训练的写作动作，兼顾表达兴趣和考试任务。',
+    structure: ['课程定位', '能力地图', '课次结构', '每课训练任务', '素材与题目配置', '作业复盘', '可继续生成的单课成品'],
+  },
+  {
+    id: 'material-transform',
+    group: '课程教研',
+    label: '资料整理',
+    title: '把已有资料整理成可用的写作教学文本',
+    hint: '教案、课程、素材、课堂记录转化',
+    button: '整理资料',
+    output: '资料诊断 + 可用成品 + 后续生成清单',
+    prompt: '请完成写作教学资料整理与转化。先判断资料来源是老师自有资料、参考课程、学生样本、课堂记录还是素材库；再提取可用部分，标注需要改写或补齐的地方，并整理成老师要用的文本。不得把参考资料误称为原创，不照搬他人表达。',
+    structure: ['资料来源判断', '可保留内容', '需重写内容', '整理后的文本', '引用与改写边界', '下一步可生成清单'],
+  },
+  {
+    id: 'parent-note',
+    group: '沟通复盘',
+    label: '家长/学生反馈',
+    title: '生成课后反馈、家长沟通或学生评语',
+    hint: '事实、进步、一件配合',
+    button: '生成反馈文案',
+    output: '可发送文本 + 学生下一步 + 老师提醒',
+    prompt: '请完成课后反馈交付。只讲教学事实、可观察进步和一个配合动作。批评文本，不审判学生；不制造焦虑，不承诺短期提分。',
+    structure: ['事实', '进步', '学生下一步', '家庭配合', '可发送文本', '老师内部提醒'],
+  },
+  {
+    id: 'teaching-review',
+    group: '沟通复盘',
+    label: '教研复盘',
+    title: '生成教学复盘或课程交付说明',
+    hint: '做了什么、问题证据、下一轮改进',
+    button: '生成教研复盘',
+    output: '复盘报告 + 改进清单 + 对外说明',
+    prompt: '请完成作文教学教研复盘。只依据提供的教学事实，整理本次完成内容、主要问题、证据和下一轮改进动作。不要写宣传话术。',
+    structure: ['本次完成内容', '学生表现', '主要问题与证据', '下一轮改进', '对外说明'],
+  },
+];
+
+const QINGHE_GRADE_OPTIONS = ['三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三', '高一', '高二', '高三'];
+const QINGHE_WRITING_TYPE_OPTIONS = ['记叙文', '议论文', '材料作文', '读后感', '微写作', '周测', '专项训练', '课程体系', '不确定'];
+const QINGHE_CLASS_TYPE_OPTIONS = ['一对一', '小班', '中班', '大班', '线上课', '公开课', '教研备课', '不确定'];
+const QINGHE_STUDENT_LEVEL_OPTIONS = ['基础薄弱', '中等', '较好', '尖子生', '差异很大', '不确定'];
+const QINGHE_DURATION_OPTIONS = ['40 分钟', '60 分钟', '90 分钟', '2 小时', '一讲', '一周训练', '长期课程', '不确定'];
+const QINGHE_SCENE_OPTIONS = ['从零起稿', '整理已有资料', '改造参考课程', '处理学生作文', '设计题目/素材', '课后沟通', '教研复盘'];
+
+type TeacherBoardId = 'correction' | 'system' | 'resources';
 type TeacherWorkflowId =
   | 'essay-correction'
   | 'lesson-review'
   | 'after-class-note'
-  | 'lesson-organize'
-  | 'ai-generate'
-  | 'polish-material';
+  | 'course-system'
+  | 'resource-bank'
+  | 'prompt-design'
+  | 'material-transform';
 
 const TEACHER_BOARDS: Array<{ id: TeacherBoardId; label: string; hint: string }> = [
-  { id: 'correction', label: '��������', hint: '���ġ��������κ�ͨ���ȹ����д����' },
-  { id: 'preparation', label: 'д����ѧ', hint: '�زġ����塢˵�θ塢�̰����������' },
+  { id: 'correction', label: '批改讲评', hint: '作文批改、讲评、课后反馈' },
+  { id: 'system', label: '课程建设', hint: '课程设计、资料转化、训练路径' },
+  { id: 'resources', label: '资源题目', hint: '素材整理、素材生成、出题训练' },
 ];
 
 const WORKFLOWS_BY_BOARD: Record<TeacherBoardId, TeacherWorkflowId[]> = {
   correction: ['essay-correction', 'lesson-review', 'after-class-note'],
-  preparation: ['lesson-organize', 'ai-generate', 'polish-material'],
+  system: ['course-system', 'material-transform'],
+  resources: ['resource-bank', 'prompt-design'],
 };
 
 const TEACHER_WORKFLOWS: Record<TeacherWorkflowId, {
@@ -154,98 +477,113 @@ const TEACHER_WORKFLOWS: Record<TeacherWorkflowId, {
 }> = {
   'essay-correction': {
     board: 'correction',
-    label: '��̿���',
-    title: 'һƪ���ģ��������Ѿ䣬������һ��',
-    intro: '���Ĳ���ͨ�þ�����������д�����ж���ɡ����Ѿ�������ӣ�������ѧ���ܸġ���ʦ�ܽ����ҳ��ܶ������ĸ塣',
-    button: '�����д��������',
-    materialLabel: 'ѧ������ / ��Ŀ / ��һ�����񣨿�ѡ��',
-    materialPlaceholder: 'ճ��ѧ�����ġ������⡢��һ���޸�����Ҳ����ֻ�ϴ� Word��PDF��TXT��Markdown��',
-    directionLabel: '�����붢סʲô����ѡ��',
-    directionPlaceholder: '���磺ֻ�����⣻�ص㿴ϸ�ڣ�����ֻ�˲���һ����Ҳ�������ϵͳ�жϡ�',
-    outputLabel: 'ϣ����������ѡ��',
-    outputPlaceholder: '���磺ѧ���� + ��ʦ�� + �ҳ��̻�����ֻҪ��ʦ����Ҫ�㡣',
-    prompt: '�밴���д������̨��ɿ���������������ƴʡ�����ʺͲ��Ϲؼ��ʣ��ٴ�ԭ���� 25 �����ڵ����Ѿ䣻ֻ��һö�����ӣ����������Ƕ����������������ۣ���ѧ����һ����3 �����ڣ����� 1 �� 10 ��������ɣ����ֿ�д����ѧ�Ľ����롾Ӧ�Ե÷֡�����ҪĬ��ֻ��һ�����壬��ʦҪ���־�֧�ּ��֡�',
-    outputStructure: ['�������', '���Ѿ�', 'һö������', '����������', '��һ���޸�����', '��ѧ/Ӧ��˫��'],
+    label: '作文批改',
+    title: '生成学生能改、老师能讲、家长能懂的批改稿',
+    intro: '面向单篇作文、考场作文、议论文、读后感和多稿追踪。用户看到的是批改稿、教师说明和下一步任务；青禾的判断方式藏在生成逻辑里。',
+    button: '生成批改稿',
+    materialLabel: '学生作文 / 题目 / 上一轮任务（可选）',
+    materialPlaceholder: '粘贴学生作文、作文题、上一稿修改任务。也可以只上传 Word、PDF、TXT、Markdown。',
+    directionLabel: '本次想盯住什么（可选）',
+    directionPlaceholder: '例如：只看审题；重点看细节；二稿只核查上一刀；也可留空让系统判断。',
+    outputLabel: '希望产出（可选）',
+    outputPlaceholder: '例如：学生包 + 老师包 + 家长短话；或只要老师讲评要点。',
+    prompt: '请完成作文批改服务：先识别场景（单篇习作、考场作文、议论文、读后感、多稿追踪等），再用青禾老师的判断方式处理：读题干限制，找原文中可保留的真实表达，确定本轮最值得改的一处；旁批必须是动作，不是情绪评价；输出学生能动笔修改、老师能据此讲评、家长能理解支持的批改稿。不要让用户必须懂“种子句/主钉子”等内部术语；可以在教师版说明判断依据。不要替学生写整篇可提交作文，不承诺官方分数。',
+    outputStructure: ['场景判断', '批改依据', '学生版反馈', '教师版说明', '家长版说明', '修改任务', '文学/应试双轨'],
   },
   'lesson-review': {
     board: 'correction',
-    label: '������',
-    title: '�ѹ������⽲��һ������صĿ�',
-    intro: '���������������� Top3 ���Դ��򣬸�ͶӰ�̾䡢΢������ҵ�ջ���',
-    button: '���ɽ�����',
-    materialLabel: '�������� / �������� / ���ļ�¼����ѡ��',
-    materialPlaceholder: 'ճ������ѧ��ԭ�ġ��������⡢���ļ�¼����ֱ���ϴ����ϡ�',
-    directionLabel: '����Ŀ�꣨��ѡ��',
-    directionPlaceholder: '���磺40 ���ӽ����Σ�ֻ����ͷ��Χ��ϸ����д������ѵ����',
-    outputLabel: 'ϣ����������ѡ��',
-    outputPlaceholder: '���磺�������� + ���� + С�� + ��ҵ��',
-    prompt: '�밴���д��������Э�鴦����ȴӲ�����ȡ���Դ��� Top3��ÿ���������ָ��ѧ��ԭ�Ļ�����źţ���һ����ͶӰ�̾䣻���һ��ԭ��ϸ����ģ��Ƭ�Σ�������΢��������γɿκ���һ������Ҫ�ѽ�����д�ɷ����̰���',
-    outputStructure: ['���Դ��� Top3', '��ͶӰ�̾�', 'ԭ��ϸ����ģ��Ƭ��', '����΢��', '�κ���һ��'],
+    label: '作文讲评',
+    title: '把一批作文或共性问题转成可上课的讲评方案',
+    intro: '面向课堂讲评、一对一复盘、小班训练。可以从学生作文样本出发，也可以从老师观察到的共性问题出发。',
+    button: '生成讲评方案',
+    materialLabel: '作文样本 / 共性问题 / 参考课例（可选）',
+    materialPlaceholder: '粘贴学生样本、共性问题、已有批改、参考课程或课堂记录。也可以直接说“从零设计”。',
+    directionLabel: '本次用途（可选）',
+    directionPlaceholder: '例如：40 分钟讲评；一对一复盘；小班训练；只处理开头；围绕细节描写。',
+    outputLabel: '希望成品（可选）',
+    outputPlaceholder: '例如：讲评流程 + 小练 + 作业；或复盘清单 + 下一轮训练。',
+    prompt: '请完成作文讲评服务：从学生样本、批改记录或老师描述中提炼本轮最值得讲的一件事；用青禾老师的方式把问题转成学生可练的动作，而不是抽象道理。输出讲评目标、可投影句、学生例句类型、示范修改一步、当堂微练、作业闭环和下一轮跟进。不要默认用户已有教案，也不要写成泛泛教案。',
+    outputStructure: ['讲评目标', '材料取舍', '可投影句', '例句与示范', '当堂微练', '作业闭环', '下一轮跟进'],
   },
   'after-class-note': {
     board: 'correction',
-    label: '�κ�ͨ',
-    title: '�����Ľ������ɼҳ���ѧ�����ö��Ļ�',
-    intro: '�κ�ͨҲ�����Ľ�ѧ��һ���֡�����ʵ��������һ����Ϻ���һ�����ѻ�е�İ�����зִ�Ľ�ѧ������',
-    button: '���ɹ�ͨ�İ�',
-    materialLabel: '���Ľ�� / ������ʵ / ѧ�����֣���ѡ��',
-    materialPlaceholder: 'ճ��������������Ҫ�㡢������������ӽ��������⡣Ҳ����ֻ�ϴ����ϡ�',
-    directionLabel: '��ͨ��������������ѡ��',
-    directionPlaceholder: '���磺���ҳ�˽�ģ����༶Ⱥ����ѧ�����ˣ������º͡����塢������Ӫ����',
-    outputLabel: 'ϣ����������ѡ��',
-    outputPlaceholder: '���磺�ҳ����λ� + ѧ����һ�� + ��ʦ�ڲ����ѡ�',
-    prompt: '�밴��̼ҳ�����Э�鴦����Ȱ����Ľ��ת�ɼҳ���ѧ���ܶ�������ʵ��ֻ��һ���ɹ۲������һ����ͥ��Ϻ�һ��ѧ����һ�����������ƣ������衢�����콹�ǡ��������ֳ�ŵ�����Ҫ��ֱ�Ӹ��Ʒ��ͣ�ҲҪ����д���ж����ݡ�',
-    outputStructure: ['д���ж�����', '��ʵ', '����', 'һ�����', 'ѧ����һ��', '��ʦ�ڲ�����'],
+    label: '课后反馈',
+    title: '把作文学习情况整理成家长和学生看得懂的话',
+    intro: '课后沟通也是作文教学的一部分。用事实、进步和一件配合，把机械文案变成有分寸的教学交付。',
+    button: '生成沟通文案',
+    materialLabel: '批改结果 / 课堂事实 / 学生表现（可选）',
+    materialPlaceholder: '粘贴本次作文批改要点、课堂情况、孩子进步或问题。也可以只上传资料。',
+    directionLabel: '沟通对象与语气（可选）',
+    directionPlaceholder: '例如：发家长私聊；发班级群；给学生本人；语气温和、具体、不焦虑营销。',
+    outputLabel: '希望产出（可选）',
+    outputPlaceholder: '例如：家长三段话 + 学生下一步 + 老师内部提醒。',
+    prompt: '请完成课后反馈服务：把作文学习情况转成学生和家长能读懂、能行动的文字。底层使用青禾老师的原则：批评文本，不审判学生；先说写出了什么，再说一个可观察进步，最后只给一件家庭配合动作和一个学生下一步动作。不要制造焦虑，不承诺短期提分。',
+    outputStructure: ['事实', '进步', '学生下一步', '家庭配合', '可发送文本', '老师内部提醒'],
   },
-  'lesson-organize': {
-    board: 'preparation',
-    label: '����̰�',
-    title: '����ɢ���β�������ɿ��Ͽΰ汾',
-    intro: '��ʦ�����뷨ʱ�����ش������ɡ������������д������ȡ�ᣬ�ٰ���ɢ��������ɽ̰������顢�����������ҵ�ջ���',
-    button: '����ɽ̰�',
-    materialLabel: '���н̰� / �����뷨 / ����ݸ壨��ѡ��',
-    materialPlaceholder: 'ճ����ɢ���αʼǡ�����ݸ塢PPT �İ���ѵ��Ŀ�꣬���ϴ��ļ���',
-    directionLabel: '����Ҫ�󣨿�ѡ��',
-    directionPlaceholder: '���磺40 ���ӣ�Ҫ�а��飻Ҫ��ѧ����������Ҫ�ʺ�С�ࡣ',
-    outputLabel: 'ϣ����������ѡ��',
-    outputPlaceholder: '���磺�̰� + ���� + ������� + ��ҵ�ջ���',
-    prompt: '�����ʦ���в�������ɿ��Ͽν̰�������ԭ�⣬�����ѧĿ�ꡢ�������̡�������ʾ��ѧ�������������ҵ�ջ���ͬʱ������е�д���ж�֧�㣬��������ơ����Ѿ䡢�����ӻ���һ����',
-    outputStructure: ['�����Ľ̰�', '������ʾ', 'ѧ������', '��ҵ�ջ�', 'д���ж�֧��'],
+  'course-system': {
+    board: 'system',
+    label: '课程设计',
+    title: '新建、整理或改造写作课程与训练路径',
+    intro: '面向长期班、短期班、单元训练、专题课和一对一训练。可以从零设计，也可以整理已有课程或参考材料。',
+    button: '生成课程方案',
+    materialLabel: '课程目标 / 现有课程 / 参考资料（可选）',
+    materialPlaceholder: '例如：初中记叙文 12 次课；已有课程目录；某位老师的课作为参考；也可以直接说从零搭建。',
+    directionLabel: '使用场景（可选）',
+    directionPlaceholder: '例如：暑期班、长期班、校内作文社团、一对一、机构小班、冲刺课。',
+    outputLabel: '希望成品（可选）',
+    outputPlaceholder: '例如：课程地图 + 课次安排 + 每课任务 + 作业闭环。',
+    prompt: '请完成写作课程设计服务：先判断用户是在从零设计、整理已有课程，还是参考其他课程材料后重构；不要默认用户已有教案，也不要把课程设计缩窄成教案、讲义或说课稿。用青禾老师的写作教学判断做底层取舍：每一课都要落到一个可训练的写作动作，保留学生表达欲，同时兼顾文学表达和应试任务。输出课程定位、能力地图、课次结构、每课训练任务、作业复盘、素材题目配置和可继续生成的单课成品。',
+    outputStructure: ['课程定位', '能力地图', '课次结构', '每课训练任务', '作业与复盘', '素材与题目配置', '可继续生成的单课成品'],
   },
-  'ai-generate': {
-    board: 'preparation',
-    label: '�زĽ���˵��',
-    title: '�زġ����塢˵�θ壬һ�����ɿɽ����汾',
-    intro: '�زİ������塢˵�θ岻��Ư���İ����ȶ�����һ��������ץ�ֺ�ѧ����������������ʦ���ϿΡ����ύ���ܷ����İ汾��',
-    button: '���ɽ�ѧ��Ʒ',
-    materialLabel: '��Ŀ / ���� / �����ز� / �γ�Ҫ�󣨿�ѡ��',
-    materialPlaceholder: '���磺ѵ����ϸ����д����Ҫһ�ݽ��壻׼��˵�θ壻��Ҫ�ɳ������زİ���Ҳ�����ϴ��������ϡ�',
-    directionLabel: 'ʹ�ó�������ѡ��',
-    directionPlaceholder: '���磺40 ���ӿΣ�����˵�Σ�����С�ࣻУ�ڹ����Σ��κ���ϰ����',
-    outputLabel: '��Ҫ�ĳ�Ʒ����ѡ��',
-    outputPlaceholder: '���磺�زİ� + ���� + ˵�θ壻PPT �Ǽܣ���ҵ�����������ָ塣',
-    prompt: '�밴���д����ѧ��ƷЭ�����ɣ����ж��û�Ҫ�����ĳ�Ʒ���ͣ����زİ������塢˵�θ塢PPT �Ǽܡ��������ָ塢��ҵ������ϰ����ٰ�ѵ��Ŀ��ѹ��һ����˵�����õ�д��ģ�ͣ����Ѿ䡢���ɡ���Ҫ������תд����ѧ/Ӧ��˫�죩�������زı���˵�������÷������������ѧ������λ�ã�˵�θ�����н�ѧĿ�ꡢ���ѵ㡢���̡���������ҵ�ջ�����Ҫ��ѧ��������ƪ���ύ���ģ�ֻ��Ƭ�μ�ʾ����',
-    outputStructure: ['��Ʒ�嵥', '����һ��', '����ģ��', '�ز����÷�', '�����˵�θ�����', 'ѧ������', '��ҵ�ջ�'],
+  'material-transform': {
+    board: 'system',
+    label: '资料转化',
+    title: '把资料转成课程、讲义、课件、逐字稿或复盘稿',
+    intro: '资料可以是自己的，也可以是参考资料、课堂记录、学生样本、零散想法。目标是转化成某种可用成品，而不是只润色教案。',
+    button: '转化资料',
+    materialLabel: '待转化资料（可选）',
+    materialPlaceholder: '粘贴课程目录、讲稿、课堂记录、学生样本、参考课例、PPT 文案或零散想法。',
+    directionLabel: '转化方向（可选）',
+    directionPlaceholder: '例如：转成讲义；转成 8 页课件；转成逐字稿；转成一节训练课；转成复盘报告。',
+    outputLabel: '希望成品（可选）',
+    outputPlaceholder: '例如：课件骨架 + 学生任务；讲义留白版；课堂逐字稿；教研复盘。',
+    prompt: '请完成资料转化服务：先判断资料来源与用途，是用户自己的材料、参考材料、课堂记录还是学生样本；再提取可用判断，不照搬、不误称原创；按用户指定方向转成课程、讲义、课件、逐字稿、作业单、复盘稿或组合成品。底层使用青禾老师的写作教学原则：所有成品都要落到学生可执行动作和后续闭环。',
+    outputStructure: ['资料判断', '可用内容', '缺口与风险', '转化后的成品', '学生任务', '后续闭环'],
   },
-  'polish-material': {
-    board: 'preparation',
-    label: '�������',
-    title: '�ϴ���ʦ�Լ������ϣ������ָ�����㲢�ĸ�',
-    intro: '������������ʦ�ȸ��Լ��Ľ̰������塢˵�θ���زİ���������������ա�����ɢ�����ﲻ���䵽ѧ���������ٸ��޸ĸ塣',
-    button: '����������',
-    materialLabel: '��ʦ�������ϣ���ѡ��',
-    materialPlaceholder: 'ճ���̰������塢���ָ塢PPT �İ�����Ŀ˵����Ҳ����ֻ�ϴ� Word��PDF��TXT��Markdown��',
-    directionLabel: 'ϣ�����������ѡ��',
-    directionPlaceholder: '���磺���ٿջ�����ѧ����������ͶӰ�̾䣻�ĳɸ���һ�߿��á�',
-    outputLabel: 'ϣ����������ѡ��',
-    outputPlaceholder: '���磺�����嵥 + �޸���� + ��ֱ��ʹ�ð汾����ֻҪ��ʦ�ڲ���ϡ�',
-    prompt: '�밴����������Э�鴦����ȿ϶�������Ͽ��ô�����ָ����Ӱ�����ʹ�õ� 1-3 �����㣻˵����ȱ��������ơ����Ѿ䡢�����ӡ������������ز��÷�����һ���е��ļ��������һ���ֱ��ʹ�õĸĸ塣��Ҫֻ��ɫ���ԣ�Ҫ������ѧ�жϺͿ���Ч����',
-    outputStructure: ['���ô�', '�������', '���ϵ�д���ж�', '�޸����', '��ֱ��ʹ�ð汾', '���貹�����ʵ'],
+  'resource-bank': {
+    board: 'resources',
+    label: '素材整理',
+    title: '生成、整理、搜集写作素材',
+    intro: '素材工作包括新生成、按主题整理、从资料中提取、给学生可用化，也包括把素材变成课堂练习。',
+    button: '生成素材库',
+    materialLabel: '主题 / 文体 / 已有素材（可选）',
+    materialPlaceholder: '例如：坚持、故乡、科技与人；已有一批素材；需要从文章里提取素材。',
+    directionLabel: '素材用途（可选）',
+    directionPlaceholder: '例如：初中记叙文；高中议论文；课堂展示；学生背诵卡；练笔题。',
+    outputLabel: '希望成品（可选）',
+    outputPlaceholder: '例如：人物事例库；主题素材包；细节意象库；金句与过渡句；练习卡。',
+    prompt: '请完成写作素材服务：先判断用户要新生成、整理已有素材、搜集方向，还是从资料中提取；按主题、文体和使用场景组织素材。底层使用青禾老师的写作教学原则：素材不是堆名人名言，而要能转化成学生可用的表达动作、片段练习或课堂任务。素材必须说明可用角度、适合文体、使用风险和练习方式；不编造具体事实，不替学生写整篇作文。',
+    outputStructure: ['素材分类', '可用角度', '文体适配', '使用风险', '课堂练习', '学生卡片版'],
+  },
+  'prompt-design': {
+    board: 'resources',
+    label: '出题设计',
+    title: '设计作文题、周测、专项练习和训练任务',
+    intro: '出题不只是月考作文，也包括日常练笔、周测、专项训练、补差保底、提分挑战和课程配套题。',
+    button: '生成题目',
+    materialLabel: '训练目标 / 学情 / 参考题（可选）',
+    materialPlaceholder: '例如：练细节描写；初三材料作文；已有参考题；某班学生容易跑题。',
+    directionLabel: '题目类型（可选）',
+    directionPlaceholder: '例如：大作文、微写作、周测、随堂练、专项训练、补差、提优。',
+    outputLabel: '希望成品（可选）',
+    outputPlaceholder: '例如：题目 + 命题说明 + 评分参考；或 5 个分层训练任务。',
+    prompt: '请完成写作出题服务：先判断训练目标、学生水平和使用场景，再生成作文题、微写作、周测、专项训练、补差保底或提分挑战。底层使用青禾老师的写作教学原则：题目要引导学生做具体写作动作，而不是套模板。每个题目要说明考查能力、限制条件、常见跑偏、评分参考或检查点，并给课堂使用建议。不冒充官方命题组。',
+    outputStructure: ['训练目标', '题目或任务', '命题说明', '常见跑偏', '评分参考或检查点', '课堂使用建议'],
   },
 };
 
-type YunqiaoTeachingBoardId = 'reading' | 'lesson-type' | 'diagnosis';
-type YunqiaoTeachingWorkflowId =
+type RongshengBoardId = 'reading' | 'lesson-type' | 'diagnosis';
+type RongshengWorkflowId =
   | 'content-decision'
   | 'lesson-skeleton'
   | 'unit-alignment'
@@ -256,20 +594,20 @@ type YunqiaoTeachingWorkflowId =
   | 'lesson-diagnosis'
   | 'activity-alignment';
 
-const YUNQIAO_TEACHING_BOARDS: Array<{ id: YunqiaoTeachingBoardId; label: string; hint: string }> = [
-  { id: 'reading', label: '���γ�Ʒ', hint: '�̰���˵�θ塢���ָ��ȶ���ѧ����' },
-  { id: 'lesson-type', label: '�������', hint: '�ж���һ�θý�ʲô�����ý�ʲô' },
-  { id: 'diagnosis', label: '��ϸĸ�', hint: '���Ŀ�ꡢ���ݡ���������Ƿ�һ��' },
+const RONGSHENG_BOARDS: Array<{ id: RongshengBoardId; label: string; hint: string }> = [
+  { id: 'reading', label: '备课成品', hint: '教案、说课稿、逐字稿先定教学内容' },
+  { id: 'lesson-type', label: '内容理据', hint: '判断这一课该教什么、不该教什么' },
+  { id: 'diagnosis', label: '诊断改稿', hint: '检查目标、内容、活动、评价是否一致' },
 ];
 
-const YUNQIAO_TEACHING_WORKFLOWS_BY_BOARD: Record<YunqiaoTeachingBoardId, YunqiaoTeachingWorkflowId[]> = {
+const RONGSHENG_WORKFLOWS_BY_BOARD: Record<RongshengBoardId, RongshengWorkflowId[]> = {
   reading: ['lesson-plan', 'speaking-script', 'teaching-transcript'],
   'lesson-type': ['content-decision', 'lesson-skeleton', 'unit-alignment', 'writing-content'],
   diagnosis: ['lesson-diagnosis', 'activity-alignment'],
 };
 
-const YUNQIAO_TEACHING_WORKFLOWS: Record<YunqiaoTeachingWorkflowId, {
-  board: YunqiaoTeachingBoardId;
+const RONGSHENG_WORKFLOWS: Record<RongshengWorkflowId, {
+  board: RongshengBoardId;
   label: string;
   title: string;
   intro: string;
@@ -285,138 +623,138 @@ const YUNQIAO_TEACHING_WORKFLOWS: Record<YunqiaoTeachingWorkflowId, {
 }> = {
   'lesson-plan': {
     board: 'reading',
-    label: '�̰�',
-    title: '����һ�����Ͽε����Ľ̰�',
-    intro: '��ȷ�����ν�ѧ���ݣ�����֯Ŀ�ꡢ���ѵ㡢���̡�������ۺ���ҵ������շ�ģ�塣',
-    button: '���ɽ̰�',
-    materialLabel: 'ƪ�� / ��Ԫ���� / �κ��� / ���β���',
-    materialPlaceholder: 'ճ��ƪ�����̲İ汾����Ԫ����κ��⡢���б��αʼǡ����û���롣',
-    directionLabel: '����Ҫ��',
-    directionPlaceholder: '���磺40 ���ӳ�̬�Σ������Σ�����ʱ��Ҫ�а����ѧ������',
-    outputLabel: '����Ҫ��',
-    outputPlaceholder: '���磺�����̰� + ���� + ��ҵ����ֻҪ�������̡�',
-    prompt: '������һ�����Ľ̰�������������������ʦʽ��ѧ�����ж϶�ס��ڿν�ʲô���������Ŀγ����ݡ��̲����ݡ���ѧ���ݣ��ٸ���ѧĿ�ꡢ���ѵ㡢�������̡�ѧ���������۷�ʽ���������ҵ����Ҫд�ɷ����̰�����Ҫ����ٷ��α�ھ���',
-    outputStructure: ['��ѧ�����ж�', '��ѧĿ��', '���ѵ�', '��������', 'ѧ������', '��������ҵ', '�������'],
+    label: '教案',
+    title: '生成一份能上课的语文教案',
+    intro: '先确定本课教学内容，再组织目标、重难点、流程、活动、评价和作业，避免空泛模板。',
+    button: '生成教案',
+    materialLabel: '篇名 / 单元导语 / 课后题 / 备课材料',
+    materialPlaceholder: '粘贴篇名、教材版本、单元导语、课后题、已有备课笔记、课堂活动设想。',
+    directionLabel: '课堂要求',
+    directionPlaceholder: '例如：40 分钟常态课；公开课；两课时；要有板书和学生任务。',
+    outputLabel: '交付要求',
+    outputPlaceholder: '例如：完整教案 + 板书 + 作业；或只要课堂流程。',
+    prompt: '请生成一份语文教案，但必须先用语文教学内容判断定住这节课教什么：区分语文课程内容、教材内容、教学内容；再给教学目标、重难点、课堂流程、学生任务、评价方式、板书和作业。不要写成泛泛教案，不要编造官方课标口径。',
+    outputStructure: ['教学内容判定', '教学目标', '重难点', '课堂流程', '学生任务', '评价与作业', '板书设计'],
   },
   'speaking-script': {
     board: 'reading',
-    label: '˵�θ�',
-    title: '��������ݵ�����˵�θ�',
-    intro: '˵��Ϊʲô����ѡ���ݡ��������Ż�������Ƕѡ��̲ķ�����ѧ����������׻���',
-    button: '����˵�θ�',
-    materialLabel: '���� / �̲����� / �̰��ݸ� / ˵��Ҫ��',
-    materialPlaceholder: 'ճ�����⡢��Ԫ����κ��⡢���н̰������������˵��Ҫ��',
-    directionLabel: '˵�γ���',
-    directionPlaceholder: '���磺������˵�Σ�����˵�Σ�5 ���Ӱ棻10 ���Ӱ档',
-    outputLabel: 'ϣ������',
-    outputPlaceholder: '���磺����˵�θ� + ������ + ��ɾ���汾��',
-    prompt: '����������˵�θ壺������˵�����ν�ѧ����ѡ�����ݣ��Լ�Ŀ�ꡢ���ݡ�����������һ�¡�����Ҫ����ʦ��˵���ڵ�˵�θ壬��Ҫ�ѿջ����漰�α�ֻ��������������ð��ٷ����͡�',
-    outputStructure: ['˵�̲������ݶ�λ', '˵ѧ��', '˵Ŀ�������ѵ�', '˵��ѧ����', '˵��������ҵ', '������'],
+    label: '说课稿',
+    title: '生成有理据的语文说课稿',
+    intro: '说清为什么这样选内容、这样安排活动，而不是堆“教材分析、学情分析”的套话。',
+    button: '生成说课稿',
+    materialLabel: '课题 / 教材线索 / 教案草稿 / 说课要求',
+    materialPlaceholder: '粘贴课题、单元导语、课后题、已有教案、比赛或教研说课要求。',
+    directionLabel: '说课场景',
+    directionPlaceholder: '例如：教研组说课；赛课说课；5 分钟版；10 分钟版。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：完整说课稿 + 设计理据 + 可删减版本。',
+    prompt: '请生成语文说课稿：核心是说明本课教学内容选择的理据，以及目标、内容、活动、评价如何一致。语言要像老师能说出口的说课稿，不要堆空话；涉及课标只做谨慎表述，不冒充官方解释。',
+    outputStructure: ['说教材与内容定位', '说学情', '说目标与重难点', '说教学过程', '说评价与作业', '设计理据'],
   },
   'teaching-transcript': {
     board: 'reading',
-    label: '���ָ�',
-    title: '�ѱ��β��ϸĳɿ������ָ�',
-    intro: '���ָ��������ƽ�����ʦ������ѧ��������׷�ʺͰ��鶼ҪΧ�ƽ�ѧ���ݡ�',
-    button: '�������ָ�',
-    materialLabel: '�̰� / ����� / �������� / �ı�����',
-    materialPlaceholder: 'ճ���̰�������̡�������������ݸ塢����Ƭ�λ����Ҫ��',
-    directionLabel: '���÷��',
-    directionPlaceholder: '���磺���ʽ����̬����Ȼ���ԣ������θ�������ѧ������������',
-    outputLabel: 'ϣ������',
-    outputPlaceholder: '���磺��ʦ���ָ� + ѧ�����ܻش� + ׷�� + ������ʾ��',
-    prompt: '��ѱ��β��ϸĳɿ������ָ壺��ȷ�ϱ��ν�ѧ���ݣ��ٰ�ÿ������д�ɽ�ʦ��˵���ڵĻ���ѧ��Ҫ���Ķ��������ܻش�׷�ʺͰ�����ʾ����Ҫֻд���ݻ�̨�ʣ���������ѧ���ݡ�',
-    outputStructure: ['��ѧ����ȷ��', '�������ָ�', 'ѧ�����ܻش�', '��ʦ׷��', '������ʾ', 'ʱ�����'],
+    label: '逐字稿',
+    title: '把备课材料改成课堂逐字稿',
+    intro: '逐字稿服务课堂推进：教师话术、学生动作、追问和板书都要围绕教学内容。',
+    button: '生成逐字稿',
+    materialLabel: '教案 / 活动流程 / 课堂问题 / 文本材料',
+    materialPlaceholder: '粘贴教案、活动流程、问题链、板书草稿、课文片段或课堂要求。',
+    directionLabel: '课堂风格',
+    directionPlaceholder: '例如：启发式；常态课自然语言；公开课更完整；学生基础薄弱。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：教师逐字稿 + 学生可能回答 + 追问 + 板书提示。',
+    prompt: '请把备课材料改成课堂逐字稿：先确认本课教学内容，再把每个环节写成教师可说出口的话、学生要做的动作、可能回答、追问和板书提示。不要只写表演化台词，必须服务教学内容。',
+    outputStructure: ['教学内容确认', '课堂逐字稿', '学生可能回答', '教师追问', '板书提示', '时间分配'],
   },
   'content-decision': {
     board: 'lesson-type',
-    label: '�����ж�',
-    title: '������һ�ε��׽�ʲô������ʲô',
-    intro: '�ѿ��ġ���Ԫ���κ��⡢ѧ��Ϳ�ʱ�ŵ�һ���жϺ��˵����Ľ�ѧ���ݣ�����ѿ������ɷ�������',
-    button: '�ж���ѧ����',
-    materialLabel: '���� / ��Ԫ���� / �κ��� / �̲�����',
-    materialPlaceholder: 'ճ��ƪ�����̲İ汾����Ԫ����κ��⡢���б����뷨�����ϲ�ȫҲ������д��֪��Ϣ��',
-    directionLabel: '��������',
-    directionPlaceholder: '���磺��֪�������Ի������⣻��ܶ൫����ɢ��������ֻʣ 40 ���ӡ�',
-    outputLabel: 'ϣ������',
-    outputPlaceholder: '���磺��ѧ�����ж� + �����嵥 + �ؼ�������ݡ�',
-    prompt: '�밴������ʦʽ���Ľ�ѧ�����жϴ�������������Ŀγ����ݡ��̲����ݡ���ѧ���ݣ��ٸ���ƪ������Ԫ���κ��⡢ѧ��Ϳ�ʱ�жϱ��κ��˽�ѧ���ݣ���ȷ�����嵥��˵��ÿ���ؼ����ڷ�����һ�����ľ��顣��Ҫд�ɷ����̰�����Ҫ�������������',
-    outputStructure: ['����֤��', '������������', '���˽�ѧ����', '�����嵥', '�ؼ����������', '���貹��Ľ̲�֤��'],
+    label: '内容判定',
+    title: '先判这一课到底教什么、不教什么',
+    intro: '把课文、单元、课后题、学情和课时放到一起，判断合宜的语文教学内容，避免把课堂做成泛泛感悟。',
+    button: '判定教学内容',
+    materialLabel: '课文 / 单元导语 / 课后题 / 教材线索',
+    materialPlaceholder: '粘贴篇名、教材版本、单元导语、课后题、现有备课想法。资料不全也可以先写已知信息。',
+    directionLabel: '本课困惑',
+    directionPlaceholder: '例如：不知道教语言还是主题；活动很多但主线散；公开课只剩 40 分钟。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：教学内容判定 + 不教清单 + 关键环节理据。',
+    prompt: '请按语文教学内容判断处理：先区分语文课程内容、教材内容、教学内容；再根据篇名、单元、课后题、学情和课时判断本课合宜教学内容；明确不教清单；说明每个关键环节服务哪一种语文经验。不要写成泛泛教案，不要抢青禾老师作文升格或文本细读工作台主链。',
+    outputStructure: ['材料证据', '三层内容区分', '合宜教学内容', '不教清单', '关键环节与理据', '还需补充的教材证据'],
   },
   'lesson-skeleton': {
     board: 'reading',
-    label: '���ιǼ�',
-    title: '���Ķ������������ݵĿ��ùǼ�',
-    intro: '��׷��Ư�����̣��ȱ�֤Ŀ�ꡢ���ݡ��һ�£��ٸ����ϿεĻ��ڹǼܡ�',
-    button: '������ιǼ�',
-    materialLabel: '���н̰� / �����뷨 / ���Ĳ���',
-    materialPlaceholder: 'ճ�����н̰������û��������������ݸ壬���ϴ� Word��PDF��TXT��Markdown��',
-    directionLabel: 'ʹ�ó���',
-    directionPlaceholder: '���磺��̬�Σ������Σ����屸�Σ�һ��ʱ������ʱ��',
-    outputLabel: 'ϣ������',
-    outputPlaceholder: '���磺Ŀ�� + ���� + � + ���۱ջ���',
-    prompt: '������б��β��������������ʦʽ���ιǼܣ���ָ�����ν�ѧ���ݣ�����дĿ�ꣻÿ�����û����˵�������ĸ���ѧ���ݣ���������Ҫ�ܼ���Ŀ�ꡣ��Ҫ��д��Ȩ��ƪ�̰����������������ס�',
-    outputStructure: ['���ν�ѧ����', 'Ŀ����д', '�ȡ��', '���ùǼ�', '��������', '�������'],
+    label: '备课骨架',
+    title: '把阅读课整理成有理据的课堂骨架',
+    intro: '不追求漂亮流程，先保证目标、内容、活动一致，再给可上课的环节骨架。',
+    button: '整理备课骨架',
+    materialLabel: '现有教案 / 课堂想法 / 课文材料',
+    materialPlaceholder: '粘贴已有教案、课堂活动、问题链、板书草稿，或上传 Word、PDF、TXT、Markdown。',
+    directionLabel: '使用场景',
+    directionPlaceholder: '例如：常态课；公开课；集体备课；一课时；两课时。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：目标 + 内容 + 活动 + 评价闭环。',
+    prompt: '请把现有备课材料整理成语文教学内容判断备课骨架：先指出本课教学内容，再重写目标；每个课堂活动必须说明服务哪个教学内容；评价任务要能检验目标。不要代写侵权整篇教案，不做纯审美独白。',
+    outputStructure: ['本课教学内容', '目标重写', '活动取舍', '课堂骨架', '评价任务', '备课理据'],
   },
   'unit-alignment': {
     board: 'reading',
-    label: '��Ԫ����',
-    title: '��鵥ƪ�뵥ԪĿ���Ƿ����',
-    intro: '�ѵ�ƪ�ηŻص�Ԫ���ж����е��������ġ��������ü����Ƕ�ƪ����',
-    button: '��鵥Ԫ����',
-    materialLabel: '��Ԫ���� / ƪĿ / �κ��� / ��Ԫ����',
-    materialPlaceholder: 'ճ����Ԫ���ƪĿ���κ��⡢����Ҫ�ػ�Ԫ����Ҫ��',
-    directionLabel: '��ǰ����',
-    directionPlaceholder: '���磺��ƪ�����ǲ��Ǹ��ؽ����⣻��Ԫ����͵�ƪ��Ӳ��ϡ�',
-    outputLabel: 'ϣ������',
-    outputPlaceholder: '���磺��Ԫ��λ + ��ƪְ�� + ��������顣',
-    prompt: '�밴��Ԫ��ѧ���ݶ������жϣ�˵����ƪ�ڵ�Ԫ�е�ְ���ж������ӽ���ƪ�����ġ����������ü������Ŀ�ꡢ��������Ƿ����Ԫ���ľ��顣���Ҫ���ƣ���ð��ٷ��α����Ȩ��',
-    outputStructure: ['��Ԫ֤��', '��ƪְ��', 'ѡ�������ж�', 'Ŀ������һ����', '��������'],
+    label: '单元对齐',
+    title: '检查单篇与单元目标是否对齐',
+    intro: '把单篇课放回单元，判断它承担的是例文、样本、用件还是定篇任务。',
+    button: '检查单元对齐',
+    materialLabel: '单元导语 / 篇目 / 课后题 / 单元任务',
+    materialPlaceholder: '粘贴单元导语、篇目、课后题、语文要素或单元任务要求。',
+    directionLabel: '当前疑问',
+    directionPlaceholder: '例如：这篇课文是不是该重讲主题；单元任务和单篇活动接不上。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：单元定位 + 单篇职责 + 活动调整建议。',
+    prompt: '请按单元教学内容对齐来判断：说明单篇在单元中的职责，判断它更接近定篇、例文、样本还是用件；检查目标、活动、评价是否服务单元语文经验。输出要克制，不冒充官方课标解释权。',
+    outputStructure: ['单元证据', '单篇职责', '选文类型判断', '目标活动评价一致性', '调整建议'],
   },
   'writing-content': {
     board: 'lesson-type',
-    label: '�����ж�',
-    title: '�������ж���һ�κ��˽�ʲô',
-    intro: '�̶����Զ���д������ϰ���ۺ���ѧϰ���Ȼص���ѧ�����жϣ�ѧ����ƪ��ɫ����������������������̡�',
-    button: '�жϿ�������',
-    materialLabel: '���� / ��Ŀ / ѵ��Ŀ�� / ��ݰ�',
-    materialPlaceholder: 'ճ�����͡����⡢ѵ���㡢ѧ���������⡢���ơ�����ѧ������ȫ��������ת��̡�',
-    directionLabel: '����Ҫ�ж�',
-    directionPlaceholder: '���磺����ε��׽�ʲô����Ƿ�̫ɢ��Ŀ���Ƿ������ۡ�',
-    outputLabel: 'ϣ������',
-    outputPlaceholder: '���磺���Ͷ�λ + ��ѧ�����ж� + �ȡ�ᡣ',
-    prompt: '�밴���������Ľ�ѧ�����жϣ����ж����ǽ̶����Զ���д������ϰ�����ۺ���ѧϰ����˵����һ�κ��˽�ʲô��ѵ��ʲô���ľ��顢������֯��������μ��顣���漰ѧ�����ĳ�ƪ���������ɫ�ͼҳ�������������ȷת����̹���̨��',
-    outputStructure: ['���Ͷ�λ', '��ѧ�����ж�', 'ѵ���ṹ', '�ȡ��', '���۷�ʽ', '����̷ֹ�'],
+    label: '课型判断',
+    title: '按课型判断这一课合宜教什么',
+    intro: '教读、自读、写作、复习、综合性学习都先回到教学内容判断；学生成篇润色、旁批、讲评话术交给青禾老师。',
+    button: '判断课型内容',
+    materialLabel: '课型 / 题目 / 训练目标 / 活动草案',
+    materialPlaceholder: '粘贴课型、课题、训练点、学生共性问题、活动设计。若是学生作文全文升格，请转青禾老师。',
+    directionLabel: '本次要判断',
+    directionPlaceholder: '例如：这类课到底教什么；活动是否太散；目标是否能评价。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：课型定位 + 教学内容判定 + 活动取舍。',
+    prompt: '请按课型做语文教学内容判断：先判断这是教读、自读、写作、复习还是综合性学习；再说明这一课合宜教什么、训练什么语文经验、活动如何组织、评价如何检验。若涉及学生作文成篇升格、逐段润色和家长反馈话术，明确转给青禾老师工作台。',
+    outputStructure: ['课型定位', '教学内容判定', '训练结构', '活动取舍', '评价方式', '与青禾老师分工'],
   },
   'lesson-diagnosis': {
     board: 'diagnosis',
-    label: '�̰����',
-    title: '��Ͻ̰��Ƿ�Ŀ�ꡢ���ݡ��һ��',
-    intro: '�ȿ���ݽ̰���������ʲô�����ж�Ŀ��ͻ�ǲ��ǻ���֧�֡�',
-    button: '��Ͻ̰�',
-    materialLabel: '�̰� / ˵�θ� / ����ʵ¼ / �����μ�¼',
-    materialPlaceholder: 'ճ���̰���˵�θ塢�������̡����ƻ����μ�¼��',
-    directionLabel: '����ص�',
-    directionPlaceholder: '���磺Ŀ��̫�飻����ֵ���֪����ʲô����������ȱʧ��',
-    outputLabel: 'ϣ������',
-    outputPlaceholder: '���磺�����嵥 + �޸ķ��� + ���ŹǼܡ�',
-    prompt: '�밴������ʦʽ�̰���ϣ��Ȼ�ԭ��ݽ̰�ʵ���ڽ�ʲô�����Ŀ�ꡢ���ݡ���������Ƿ�һ�£�ָ����Ӱ����ó����� 1-3 �����⣻�����޸ĺ�ĹǼܡ���Ҫֻ��ɫ���ԡ�',
-    outputStructure: ['ʵ�ʽ�ѧ����', 'һ�������', '�ؼ�����', '�޸ĹǼ�', '�������'],
+    label: '教案诊断',
+    title: '诊断教案是否目标、内容、活动一致',
+    intro: '先看这份教案真正教了什么，再判断目标和活动是不是互相支持。',
+    button: '诊断教案',
+    materialLabel: '教案 / 说课稿 / 课堂实录 / 听评课记录',
+    materialPlaceholder: '粘贴教案、说课稿、课堂流程、活动设计或评课记录。',
+    directionLabel: '诊断重点',
+    directionPlaceholder: '例如：目标太虚；活动热闹但不知道教什么；评价任务缺失。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：问题清单 + 修改方向 + 重排骨架。',
+    prompt: '请按语文教学内容判断教案诊断：先还原这份教案实际在教什么；检查目标、内容、活动、评价是否一致；指出最影响课堂成立的 1-3 个问题；给出修改后的骨架。不要只润色语言。',
+    outputStructure: ['实际教学内容', '一致性诊断', '关键问题', '修改骨架', '备课理据'],
   },
   'activity-alignment': {
     board: 'diagnosis',
-    label: '�ȡ��',
-    title: '�жϿ��û�ǲ��Ƿ����ѧ����',
-    intro: '��������̶ֳ��жϣ���������������ľ����Ŀ��֤���жϡ�',
-    button: '���ȡ��',
-    materialLabel: '���û / ������ / ѧϰ����',
-    materialPlaceholder: 'ճ������̡��������⡢С��������ϰ��ƻ���顣',
-    directionLabel: '�뱣�����ԥ�Ļ',
-    directionPlaceholder: '���磺�ʶ������ۡ����ݡ���д����չ�����Ƿ�����',
-    outputLabel: 'ϣ������',
-    outputPlaceholder: '���磺���� / �޸� / ɾ���嵥��',
-    prompt: '������ûȡ�᣺ÿ�����Ҫ�ش��������ĸ���ѧ���ݡ�ѧ�����γ�ʲô���ľ��顢������ۡ��ѻ�ֳɱ�����޸ġ�ɾ�����࣬��˵�����ɡ�',
-    outputStructure: ['������ж�', '�����嵥', '�޸��嵥', 'ɾ���嵥', '����֤��'],
+    label: '活动取舍',
+    title: '判断课堂活动是不是服务教学内容',
+    intro: '活动不按热闹程度判断，而按它服务的语文经验和目标证据判断。',
+    button: '检查活动取舍',
+    materialLabel: '课堂活动 / 问题链 / 学习任务',
+    materialPlaceholder: '粘贴活动流程、课堂问题、小组任务、练习设计或板书。',
+    directionLabel: '想保留或犹豫的活动',
+    directionPlaceholder: '例如：朗读、讨论、表演、仿写、拓展资料是否该留。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：保留 / 修改 / 删除清单。',
+    prompt: '请检查课堂活动取舍：每个活动都要回答它服务哪个教学内容、学生会形成什么语文经验、如何评价。把活动分成保留、修改、删除三类，并说明理由。',
+    outputStructure: ['活动逐项判断', '保留清单', '修改清单', '删除清单', '评价证据'],
   },
 };
 
@@ -429,13 +767,13 @@ export type PoetryWorkflowId =
   | 'allusion-check'
   | 'material-polish';
 
-export const POETRY_BOARDS: Array<{ id: PoetryBoardId; label: string; hint: string }> = [
-  { id: 'lesson', label: '���ó�Ʒ', hint: '�̰��������⡢����������ƽ�' },
-  { id: 'reading', label: 'ʫ�ʽ���', hint: '�ж����顢�����·����˷��ж�' },
-  { id: 'diagnosis', label: '�������', hint: '��齲�塢�̰��ͻ�Ƿ���ס�ı�' },
+const POETRY_BOARDS: Array<{ id: PoetryBoardId; label: string; hint: string }> = [
+  { id: 'lesson', label: '课堂成品', hint: '教案、主问题、板书与课堂推进' },
+  { id: 'reading', label: '诗词讲读', hint: '诵读声情、意象章法、兴发感动' },
+  { id: 'diagnosis', label: '材料诊改', hint: '检查讲稿、教案和活动是否贴住文本' },
 ];
 
-export const POETRY_WORKFLOWS_BY_BOARD: Record<PoetryBoardId, PoetryWorkflowId[]> = {
+const POETRY_WORKFLOWS_BY_BOARD: Record<PoetryBoardId, PoetryWorkflowId[]> = {
   lesson: ['lesson-plan', 'main-questions'],
   reading: ['recitation', 'image-structure', 'allusion-check'],
   diagnosis: ['material-polish'],
@@ -450,7 +788,7 @@ const POETRY_FLAT_WORKFLOW_IDS: PoetryWorkflowId[] = [
   'material-polish',
 ];
 
-export const POETRY_WORKFLOWS: Record<PoetryWorkflowId, {
+const POETRY_WORKFLOWS: Record<PoetryWorkflowId, {
   board: PoetryBoardId;
   label: string;
   title: string;
@@ -467,93 +805,93 @@ export const POETRY_WORKFLOWS: Record<PoetryWorkflowId, {
 }> = {
   'lesson-plan': {
     board: 'lesson',
-    label: '������',
-    title: '����һ�ڹŵ�ʫ�ʽ�����',
-    intro: '���ж����֣���ס�ı�֤�ݣ��γɿ��ϿεĽ�����Ρ�������Ͱ��顣',
-    button: '���ɽ�����',
-    materialLabel: 'ƪĿ / ԭ�� / ע�� / �̲�����',
-    materialPlaceholder: 'ճ��ʫ��ԭ�ġ�ƪĿ��ע�͡���ԪҪ�����н̰���������ơ�',
-    directionLabel: '����Ҫ��',
-    directionPlaceholder: '���磺40 ���ӹ����Σ����ſΣ����л���������Ҫ�а�����ʶ���ơ�',
-    outputLabel: '����Ҫ��',
-    outputPlaceholder: '���磺�̰� + �������� + ���� + �ж���ʾ��',
-    prompt: '�����ɹŵ�ʫ�ʽ����Σ���ȷ���ı���ѧ�Σ��ٴ��ж����顢�����·����˷��ж�����ʲ�췽����֯���á����Ҫ�ܰ�����ʦ�ϿΣ���Ҫд�ɷ����ķ��빤�ߣ���Ҫ���������Ļ��ִ��ĸ���ģ�塣',
-    outputStructure: ['�ı�����', '��ѧĿ��', '�ж�������', '�������', '��������', '�������', '��������'],
+    label: '讲读课',
+    title: '生成一节古典诗词讲读课',
+    intro: '从诵读入手，贴住文本证据，形成可上课的讲读层次、主问题和板书。',
+    button: '生成讲读课',
+    materialLabel: '篇目 / 原文 / 注释 / 教材线索',
+    materialPlaceholder: '粘贴诗词原文、篇目、注释、单元要求、已有教案或课堂限制。',
+    directionLabel: '课堂要求',
+    directionPlaceholder: '例如：40 分钟公开课；社团课；初中基础较弱；要有板书和朗读设计。',
+    outputLabel: '交付要求',
+    outputPlaceholder: '例如：教案 + 主问题链 + 板书 + 诵读提示。',
+    prompt: '请生成古典诗词讲读课：先确认文本和学段，再从诵读声情、意象章法、兴发感动、典故查检方向组织课堂。输出要能帮助老师上课，不要写成泛古文翻译工具，不要做作文批改或现代文赋分模板。',
+    outputStructure: ['文本依据', '教学目标', '诵读与声情', '讲读层次', '主问题链', '板书设计', '课堂任务'],
   },
   'main-questions': {
     board: 'lesson',
-    label: '������',
-    title: '��ʫ�ʽ�������ɿ�����������',
-    intro: '��������ı��ﳤ�����������ʶ�����⡢���ͺͿ����ƽ���',
-    button: '������������',
-    materialLabel: 'ƪĿ / ԭ�� / �������� / ����Ŀ��',
-    materialPlaceholder: 'ճ��ԭ�ġ�������������ѧ���������ϣ��������ص㡣',
-    directionLabel: '������Ҫ��',
-    directionPlaceholder: '���磺3 �������⣻�ʺϳ�����Ҫ�ܴ����������в�Ρ�',
-    outputLabel: 'ϣ������',
-    outputPlaceholder: '���磺�������� + ׷�� + ѧ��� + ���顣',
-    prompt: '��Ϊ�ŵ�ʫ�ʿ������������������������ס�ı�֤�ݣ��ܴ����ж��������·����˷��ж�����Ҫ������д�ɷ����������ۣ���Ҫ�ѵ�ʡ�',
-    outputStructure: ['���Ľ���Ŀ��', '��������', '׷�����', 'ѧ������', '������'],
+    label: '主问题',
+    title: '把诗词讲读整理成课堂主问题链',
+    intro: '主问题从文本里长出来，服务朗读、理解、鉴赏和课堂推进。',
+    button: '生成主问题链',
+    materialLabel: '篇目 / 原文 / 现有问题 / 课堂目标',
+    materialPlaceholder: '粘贴原文、已有问题链、学生卡点或你希望讲清的重点。',
+    directionLabel: '问题链要求',
+    directionPlaceholder: '例如：3 个主问题；适合初二；要能带出意象和情感层次。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：主问题链 + 追问 + 学生活动 + 板书。',
+    prompt: '请为古典诗词课生成主问题链：问题必须贴住文本证据，能带动诵读、意象、章法和兴发感动。不要把问题写成泛泛主题讨论，不要堆典故。',
+    outputStructure: ['核心讲读目标', '主问题链', '追问设计', '学生任务', '板书层次'],
   },
   recitation: {
     board: 'reading',
-    label: '�ж�',
-    title: '����ж���ͣ�����������',
-    intro: '�ö�������ʫ�ʣ������ʶ���װ�Σ����ǰ���ѧ��������к��·���',
-    button: '�����ж���ʾ',
-    materialLabel: 'ʫ��ԭ�� / ע�� / �ʶ�����',
-    materialPlaceholder: 'ճ��ԭ�ġ�ע�͡�ѧ�����������ľ��ӻ����봦��������ص㡣',
-    directionLabel: '�ж�Ŀ��',
-    directionPlaceholder: '���磺����ת�ۣ���������������ɾ����顣',
-    outputLabel: 'ϣ������',
-    outputPlaceholder: '���磺ͣ�ٽ��� + ������ʾ + �ʶ�����',
-    prompt: '����ƹŵ�ʫ���ж���ʾ��˵��ͣ�١���������ƺ�������������ı�������������ʦ�ɲ����Ŀ����ʶ����񡣲�Ҫ����̶�Ψһ������',
-    outputStructure: ['�ı�����', 'ͣ��������', '����˵��', '�����ʶ�����', 'ע��߽�'],
+    label: '诵读',
+    title: '设计诵读、停顿与声情理解',
+    intro: '用读法进入诗词，不把朗读当装饰，而是帮助学生听见情感和章法。',
+    button: '生成诵读提示',
+    materialLabel: '诗词原文 / 注释 / 朗读困惑',
+    materialPlaceholder: '粘贴原文、注释、学生读不出来的句子或你想处理的声情重点。',
+    directionLabel: '诵读目标',
+    directionPlaceholder: '例如：读出转折；读出沉郁；读出由景入情。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：停顿建议 + 重音提示 + 朗读任务。',
+    prompt: '请设计古典诗词诵读提示：说明停顿、重音、语势和声情如何依据文本而来，并给老师可操作的课堂朗读任务。不要编造固定唯一读法。',
+    outputStructure: ['文本依据', '停顿与重音', '声情说明', '课堂朗读任务', '注意边界'],
   },
   'image-structure': {
     board: 'reading',
-    label: '�����·�',
-    title: '�����������硢�·��ṹ���˷��ж�',
-    intro: '�������·�����з������̽�������ü��Ͳ��ǿշ����顣',
-    button: '����������',
-    materialLabel: 'ʫ��ԭ�� / ע�� / �������',
-    materialPlaceholder: 'ճ��ԭ�ġ�ע�͡�ѧ���������������ݸ塣',
-    directionLabel: '�����ص�',
-    directionPlaceholder: '���磺����仯������Ƭ�ṹ���ɾ����飻�˷��ж���',
-    outputLabel: 'ϣ������',
-    outputPlaceholder: '���磺��ν��� + ���� + ѧ�����⡣',
-    prompt: '������ŵ�ʫ�ʵ��������硢�·��ṹ���˷��ж��������жϱ���ص��־�֤�ݣ����ⷺ�����������',
-    outputStructure: ['�ı����', '��������', '�·��ṹ', '�˷��ж�', '���齨��'],
+    label: '意象章法',
+    title: '梳理意象脉络、章法结构与兴发感动',
+    intro: '把意象、章法和情感发生过程讲清楚，让鉴赏不是空泛抒情。',
+    button: '梳理讲读层次',
+    materialLabel: '诗词原文 / 注释 / 已有理解',
+    materialPlaceholder: '粘贴原文、注释、学生理解或现有赏析草稿。',
+    directionLabel: '讲读重点',
+    directionPlaceholder: '例如：意象变化；上下片结构；由景到情；兴发感动。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：层次讲读 + 板书 + 学生问题。',
+    prompt: '请梳理古典诗词的意象脉络、章法结构和兴发感动：所有判断必须回到字句证据，避免泛泛主题概括。',
+    outputStructure: ['文本层次', '意象脉络', '章法结构', '兴发感动', '板书建议'],
   },
   'allusion-check': {
     board: 'reading',
-    label: '���',
-    title: '������ʡ������뱳���Ĳ�췽��',
-    intro: '���ֻ����Ҫ��ʾ���������ʫ�ʣ����ѿ��ñ��֪ʶ�ѵ���',
-    button: '���ɲ�췽��',
-    materialLabel: 'ʫ��ԭ�� / ���Ƶ�� / ע�Ͳ���',
-    materialPlaceholder: 'ճ��ԭ�ġ�ע�͡����Ƶ�ʡ��������ϻ�ѧ����ס�Ĵʾ䡣',
-    directionLabel: '���߽�',
-    directionPlaceholder: '���磺ֻҪ���ÿɽ����֣���Ҫչ��̫�����ף��ʺϳ��С�',
-    outputLabel: 'ϣ������',
-    outputPlaceholder: '���磺��ʷ��� + ���ý��� + ����չ�����ݡ�',
-    prompt: '����ŵ�ʫ�ʵ�ʡ����ĺͱ����Ĳ�췽��ֻ��ʾ�ɿ����·���Ϳ��ñ�Ҫ������������δȷ����Դ�����õ��ѹ���ı�������',
-    outputStructure: ['�ɵ�ʾ�', '��췽��', '���ý���', '����չ������', '����ȷ�ϲ���'],
+    label: '典故',
+    title: '给出典故、互文与背景的查检方向',
+    intro: '典故只做必要提示，服务理解诗词，不把课堂变成知识堆叠。',
+    button: '生成查检方向',
+    materialLabel: '诗词原文 / 疑似典故 / 注释材料',
+    materialPlaceholder: '粘贴原文、注释、疑似典故、背景材料或学生卡住的词句。',
+    directionLabel: '查检边界',
+    directionPlaceholder: '例如：只要课堂可讲部分；不要展开太多文献；适合初中。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：典故方向 + 课堂讲法 + 不宜展开内容。',
+    prompt: '请给古典诗词典故、互文和背景的查检方向：只提示可靠查检路径和课堂必要讲法，不编造未确认来源，不用典故压过文本讲读。',
+    outputStructure: ['疑点词句', '查检方向', '课堂讲法', '不宜展开内容', '仍需确认材料'],
   },
   'material-polish': {
     board: 'diagnosis',
-    label: '���',
-    title: '���ʫ�ʽ̰��򽲸��Ƿ���ס�ı�',
-    intro: '�������Ƿ��ʫ�ʱ���������Ƿ����ж��������·���������֧�š�',
-    button: '��ϲ��ĸ�',
-    materialLabel: '�̰� / ���� / PPT �İ� / ����',
-    materialPlaceholder: 'ճ������ʫ�ʽ̰������塢���������������û��',
-    directionLabel: '����ص�',
-    directionPlaceholder: '���磺̫����Σ�����̫ɢ��ȱ���ʶ������̫�ࡣ',
-    outputLabel: 'ϣ������',
-    outputPlaceholder: '���磺�����嵥 + �޸Ľ��� + ���ð汾��',
-    prompt: '�����ʫ�ʽ�ѧ���ϣ������Ƿ���ס�ı�֤�ݣ��Ƿ����ж����顢�����·����˷��ж��Ϳ��Ͽ������⡣ָ�� 1-3 ���ؼ����Ⲣ�������øĸ塣',
-    outputStructure: ['���ô�', '�ؼ�����', '�޸ķ���', '���øĸ�', '�������'],
+    label: '诊改',
+    title: '诊断诗词教案或讲稿是否贴住文本',
+    intro: '检查材料是否从诗词本身出发，是否有诵读、意象、章法和主问题支撑。',
+    button: '诊断并改稿',
+    materialLabel: '教案 / 讲稿 / PPT 文案 / 活动设计',
+    materialPlaceholder: '粘贴已有诗词教案、讲稿、问题链、板书或课堂活动。',
+    directionLabel: '诊改重点',
+    directionPlaceholder: '例如：太像翻译课；问题太散；缺少朗读；典故太多。',
+    outputLabel: '希望产出',
+    outputPlaceholder: '例如：问题清单 + 修改建议 + 可用版本。',
+    prompt: '请诊断诗词教学材料：看它是否贴住文本证据，是否有诵读声情、意象章法、兴发感动和可上课主问题。指出 1-3 个关键问题并给出可用改稿。',
+    outputStructure: ['可用处', '关键问题', '修改方向', '可用改稿', '补充材料'],
   },
 };
 
@@ -569,8 +907,11 @@ type WorkbenchFieldKey =
   | 'textbook'
   | 'materialType'
   | 'studentLevel'
-  | 'situation'
-  | 'original_words';
+  | 'classType'
+  | 'lessonDuration'
+  | 'specificGoal'
+  | 'prompt'
+  | 'text';
 
 interface WorkbenchField {
   key: WorkbenchFieldKey;
@@ -578,7 +919,6 @@ interface WorkbenchField {
   placeholder: string;
   rows?: number;
   options?: string[];
-  control?: 'select' | 'chips' | 'multi';
 }
 
 type WorkbenchValues = Record<WorkbenchFieldKey, string>;
@@ -598,226 +938,173 @@ const DEFAULT_WORKBENCH: WorkbenchValues = {
   background: '',
   goal: '',
   material: '',
-  output: '�жϽ��� + �ж��嵥',
+  output: '判断结论 + 行动清单',
   grade: '',
   region: '',
   textbook: '',
   materialType: '',
   studentLevel: '',
-  situation: '',
-  original_words: '',
+  classType: '',
+  lessonDuration: '',
+  specificGoal: '',
+  prompt: '',
+  text: '',
+};
+
+const MINDFULNESS_WORKBENCH: WorkbenchValues = {
+  ...DEFAULT_WORKBENCH,
+  background: '',
+  goal: '先稳定下来',
+  material: '',
+  output: '安抚语言 + 正念练习步骤',
 };
 
 const QINGHE_WRITING_WORKBENCH: WorkbenchValues = {
-  clientName: '',
-  clientBackground: '',
-  background: '',
-  goal: '',
-  material: '',
+  ...DEFAULT_WORKBENCH,
   output: '',
-  grade: '',
-  region: '',
-  textbook: '',
-  materialType: '',
-  studentLevel: '',
-  situation: '',
-  original_words: '',
 };
 
 const YUNQIAO_JIAOXUE_WORKBENCH: WorkbenchValues = {
-  clientName: '',
-  clientBackground: '',
-  background: '',
-  goal: '',
-  material: '',
+  ...DEFAULT_WORKBENCH,
   output: '',
-  grade: '',
-  region: '',
-  textbook: '',
-  materialType: '',
-  studentLevel: '',
-  situation: '',
-  original_words: '',
 };
 
 const SONGYUE_SHICI_WORKBENCH: WorkbenchValues = {
-  clientName: '',
-  clientBackground: '',
-  background: '',
-  goal: '',
-  material: '',
-  output: '�����Ǽ� + �������� + �ж���ʾ',
-  grade: '',
-  region: '',
-  textbook: '',
-  materialType: '',
-  studentLevel: '',
-  situation: '',
-  original_words: '',
+  ...DEFAULT_WORKBENCH,
+  output: '讲读骨架 + 主问题链 + 诵读提示',
 };
 
-const BINGSHAN_WORKBENCH: WorkbenchValues = {
-  clientName: '',
-  clientBackground: '',
-  background: '',
-  goal: '',
-  material: '',
-  output: '��ȷ���� + �������� + ��һ���ж�',
-  grade: '',
-  region: '',
-  textbook: '',
-  materialType: '',
-  studentLevel: '',
-  situation: '',
-  original_words: '',
+const ZHIYUAN_WORKBENCH: WorkbenchValues = {
+  ...DEFAULT_WORKBENCH,
+  output: '路径判断 + 风险清单 + 下一步',
 };
 
 const ANRAN_LAOSHI_WORKBENCH: WorkbenchValues = {
-  clientName: '',
-  clientBackground: '',
-  background: '',
-  goal: '',
-  material: '',
-  output: '',
-  grade: '',
-  region: '',
-  textbook: '',
-  materialType: '',
-  studentLevel: '',
-  situation: '',
-  original_words: '',
+  ...DEFAULT_WORKBENCH,
+  background: '当前状态：',
+  output: '短时处理步骤',
 };
 
 function getInitialWorkbench(expertId: string) {
   if (expertId === 'qinghe-xiezuo') return { ...QINGHE_WRITING_WORKBENCH };
   if (expertId === 'yunqiao-jiaoxue') return { ...YUNQIAO_JIAOXUE_WORKBENCH };
   if (expertId === 'songyue-shici') return { ...SONGYUE_SHICI_WORKBENCH };
-  if (expertId === 'zhiyuan-laoshi') return { ...BINGSHAN_WORKBENCH };
-  return expertId === 'anran-laoshi' ? { ...ANRAN_LAOSHI_WORKBENCH } : { ...DEFAULT_WORKBENCH };
-}
-
-function toggleMultiValue(current: string, option: string) {
-  const values = current.split('��').map(item => item.trim()).filter(Boolean);
-  const next = values.includes(option)
-    ? values.filter(item => item !== option)
-    : [...values, option];
-  return next.join('��');
+  if (expertId === 'zhiyuan-laoshi') return { ...ZHIYUAN_WORKBENCH };
+  if (expertId === 'anran-laoshi') return { ...ANRAN_LAOSHI_WORKBENCH };
+  return expertId === 'thich-nhat-hanh' ? { ...MINDFULNESS_WORKBENCH } : { ...DEFAULT_WORKBENCH };
 }
 
 function getWorkbenchCopy(expertId: string): WorkbenchCopy {
   if (expertId === 'qinghe-xiezuo') {
     return {
-      title: '����������д����ѧ����̨',
-      intro: '����ճ�����ġ���Ŀ���̰������塢˵�θ����ʦ�������ϣ�Ҳ����ֱ���ϴ� Word��PDF���ı��ȿɶ�ȡ���ϡ����ֻ�����������ġ�д����ѧ�������Ρ���ѧ��Ʒ���ɺ�������ġ�',
-      button: '��ʼ����',
-      prompt: '���������������д����ѧ����̨��Ϣ���Ȱ����д�����жϣ�����ɱ�����ʦ��Ҫ�����ĳ�Ʒ��������ġ�',
-      outputFallback: '��ֱ��ʹ�ó�Ʒ + д���ж�����',
+      title: '作文批改与写作教学工作台',
+      intro: '请先说明要完成的作文教学工作，也可以粘贴作文、题目、课程资料、素材、题库或课堂记录。青禾老师只处理作文批改、讲评、课程训练、素材整理、出题设计和写作教学交付。',
+      button: '开始处理',
+      prompt: '请根据作文批改与写作教学工作台信息，先判断老师要完成的实际工作，再用青禾老师的写作教学判断完成可交付成品。',
+      outputFallback: '可直接使用成品 + 青禾老师判断依据',
       fields: [
-        { key: 'grade', label: '�꼶', placeholder: '��ѡ���꼶', rows: 1, options: ['���꼶', '���꼶', '���꼶', '���꼶', '��һ', '����', '����', '��һ', '�߶�', '����'] },
-        { key: 'region', label: '����', placeholder: 'ʡ�ݻ���У����磺�����Ͼ�', rows: 1 },
-        { key: 'textbook', label: '�̲İ汾', placeholder: '��ѡ��̲İ汾', rows: 1, options: ['ͳ���', '�˽̰�', '�ս̰�', '���̰�', '����', '��ȷ��'] },
-        { key: 'materialType', label: '��������', placeholder: '��ѡ���������', rows: 1, options: ['����', '�Ծ�', '�ճ���ҵ', 'С����', '�Ķ����', '����'] },
-        { key: 'goal', label: '����Ŀ��', placeholder: '��ѡ������Ŀ��', rows: 1, options: ['�������', 'Ӧ�����', '���ý���', '�ҳ�����', 'ѧ���޸�����'] },
-        { key: 'studentLevel', label: 'ѧ��ˮƽ', placeholder: '��ѡ��ѧ��ˮƽ', rows: 1, options: ['��������', '�е�', '�Ϻ�', '������', '��ȷ��'] },
-        { key: 'material', label: '���Ļ��������', placeholder: '��ճ���������ġ���ĿҪ���Ծ���ɻ��ճ���ҵ���ݡ��ݲ�֧��ͼƬʶ��', rows: 8 },
-        { key: 'output', label: '��������', placeholder: '��ѡ����������', rows: 1, options: ['�������� + �޸Ľ���', '�Ծ�������', '�ճ���ҵ����', '�ҳ��ɶ�����', 'ѧ���޸�����'] },
+        { key: 'grade', label: '年级', placeholder: '请选择年级', rows: 1, options: ['三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三', '高一', '高二', '高三'] },
+        { key: 'region', label: '地区', placeholder: '省份或城市，例如：江苏南京', rows: 1 },
+        { key: 'textbook', label: '教材版本', placeholder: '请选择教材版本', rows: 1, options: ['统编版', '人教版', '苏教版', '沪教版', '其他', '不确定'] },
+        { key: 'materialType', label: '材料类型', placeholder: '请选择材料类型', rows: 1, options: ['作文', '试卷', '日常作业', '小练笔', '阅读理解', '其他'] },
+        { key: 'goal', label: '批改目标', placeholder: '请选择批改目标', rows: 1, options: ['提升表达', '应试提分', '课堂讲评', '家长反馈', '学生修改任务'] },
+        { key: 'studentLevel', label: '学生水平', placeholder: '请选择学生水平', rows: 1, options: ['基础薄弱', '中等', '较好', '尖子生', '不确定'] },
+        { key: 'material', label: '作文或材料内容', placeholder: '请粘贴作文正文、题目要求、试卷题干或日常作业内容。暂不支持图片识别。', rows: 8 },
+        { key: 'output', label: '期望产出', placeholder: '请选择期望产出', rows: 1, options: ['作文批改 + 修改建议', '试卷讲评提纲', '日常作业反馈', '家长可读反馈', '学生修改任务'] },
       ] satisfies WorkbenchField[],
     };
   }
 
   if (expertId === 'yunqiao-jiaoxue') {
     return {
-      title: '������ʦ �� ���Ľ�ѧ���ݹ���̨',
-      intro: '���ȷ���ƪ������Ԫ�������κ��⡢���н̰�����û��������ʦ�����ж���һ�ν�ʲô������ʲô���Լ�Ŀ�ꡢ���ݡ���������Ƿ�һ�¡�',
-      button: '��ʼ�����ж�',
-      prompt: '��������Ľ�ѧ�����뱸�ξ��߹���̨��Ϣ�����жϺ��˽�ѧ���ݣ��ټ��Ŀ�ꡢ������۵�һ���ԡ�',
-      outputFallback: '��ѧ�����ж� + ������� + �����',
+      title: '云桥老师 · 语文教学内容工作台',
+      intro: '请先放入篇名、单元线索、课后题、现有教案或课堂活动。云桥老师负责判断这一课教什么、不教什么，以及目标、内容、活动、评价是否一致。',
+      button: '开始备课判断',
+      prompt: '请根据语文教学内容与备课决策工作台信息，先判断合宜教学内容，再检查目标、活动、评价的一致性。',
+      outputFallback: '教学内容判定 + 备课理据 + 活动调整',
       fields: [
-        { key: 'grade', label: '�꼶', placeholder: '��ѡ���꼶', rows: 1, options: ['���꼶', '���꼶', '���꼶', '���꼶', '��һ', '����', '����', '��һ', '�߶�', '����'] },
-        { key: 'region', label: '����', placeholder: 'ʡ�ݻ���У����磺�����Ͼ�', rows: 1 },
-        { key: 'textbook', label: '�̲İ汾', placeholder: '��ѡ��̲İ汾', rows: 1, options: ['ͳ���', '�˽̰�', '�ս̰�', '���̰�', '����', '��ȷ��'] },
-        { key: 'materialType', label: '����', placeholder: '��ѡ�����', rows: 1, options: ['�̶���', '�Զ���', 'д����', '��Ԫ����', '��ϰ��', '����ĥ��', '��ȷ��'] },
-        { key: 'studentLevel', label: 'ѧ��', placeholder: '��ѡ��ѧ��', rows: 1, options: ['��������', '�е�', '�Ϻ�', '����ܴ�', '��ȷ��'] },
-        { key: 'material', label: '�̲��뱸�β���', placeholder: '��ճ��ƪ������Ԫ����κ��⡢�̰������ƻ������μ�¼��', rows: 8 },
-        { key: 'goal', label: '��������', placeholder: '���磺��֪����һ�θý����Ի������⣻��ܶ൫����ɢ��', rows: 2 },
-        { key: 'output', label: '��������', placeholder: '���磺��ѧ�����ж� + �����嵥 + ���ùǼܡ�', rows: 1 },
+        { key: 'grade', label: '年级', placeholder: '请选择年级', rows: 1, options: ['三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三', '高一', '高二', '高三'] },
+        { key: 'region', label: '地区', placeholder: '省份或城市，例如：江苏南京', rows: 1 },
+        { key: 'textbook', label: '教材版本', placeholder: '请选择教材版本', rows: 1, options: ['统编版', '人教版', '苏教版', '沪教版', '其他', '不确定'] },
+        { key: 'materialType', label: '课型', placeholder: '请选择课型', rows: 1, options: ['教读课', '自读课', '写作课', '单元导读', '复习课', '评课磨课', '不确定'] },
+        { key: 'studentLevel', label: '学情', placeholder: '请选择学情', rows: 1, options: ['基础薄弱', '中等', '较好', '差异很大', '不确定'] },
+        { key: 'material', label: '教材与备课材料', placeholder: '请粘贴篇名、单元导语、课后题、教案、活动设计或听评课记录。', rows: 8 },
+        { key: 'goal', label: '备课困惑', placeholder: '例如：不知道这一课该教语言还是主题；活动很多但主线散。', rows: 2 },
+        { key: 'output', label: '期望产出', placeholder: '例如：教学内容判定 + 不教清单 + 课堂骨架。', rows: 1 },
       ] satisfies WorkbenchField[],
     };
   }
 
   if (expertId === 'songyue-shici') {
     return {
-      title: '�ŵ�ʫ�ʽ�������̨',
-      intro: '��ƪĿ��ԭ�ġ�ѧ�Ρ����ͺ���������ȷŽ�������������ֻ����ŵ�ʫ�ʽ�����ʫ�ʼ��͡��˷��ж����ж�ʽ��⣬���������������Ҳ�����������ĺ��ִ��ĸ���ģ�塣',
-      button: '��ʼʫ�ʽ���',
-      prompt: '����ݹŵ�ʫ�ʽ�������̨��Ϣ��Χ���ı�֤����ɽ��������͡��ж��������������ơ�',
-      outputFallback: '�����Ǽ� + �������� + �ж���ʾ',
+      title: '古典诗词讲读工作台',
+      intro: '把篇目、原文、学段、课型和已有理解先放进来。松月先生只处理古典诗词讲读、诗词鉴赏、兴发感动与诵读式理解，不做泛古文整理，也不接作文批改和现代文赋分模板。',
+      button: '开始诗词讲读',
+      prompt: '请根据古典诗词讲读工作台信息，围绕文本证据完成讲读、鉴赏、诵读与课堂主问题设计。',
+      outputFallback: '讲读骨架 + 主问题链 + 诵读提示',
       fields: [
-        { key: 'grade', label: 'ѧ��', placeholder: '��ѡ��ѧ��', rows: 1, options: ['Сѧ���꼶', '����', '����', '��ѧͨʶ', '������ѧ', '��ȷ��'] },
-        { key: 'textbook', label: '�̲Ļ�汾', placeholder: '���磺ͳ������ / У����չ / ���ſ�', rows: 1 },
-        { key: 'materialType', label: '��������', placeholder: '��ѡ���������', rows: 1, options: ['����ʫ', '���״�', '��ʫ', '����ר��', 'ʫ��ר��', '���û���'] },
-        { key: 'studentLevel', label: 'ѧϰ����', placeholder: '��ѡ��ѧϰ����', rows: 1, options: ['��ѧ', '�л���', '������ϰ', '������չ', '��ȷ��'] },
-        { key: 'background', label: 'ʹ�ó���', placeholder: '���磺�����Ρ����ſΡ���ѧ��������ǰ���롢ר����չ��', rows: 2 },
-        { key: 'material', label: 'ʫ��ԭ�Ļ����', placeholder: 'ճ��ƪĿ��ԭ�ġ�ע�͡����н̰������뽲������⡣û����������ʱ��������д��ƪĿ��', rows: 5 },
-        { key: 'goal', label: '���ν����ص�', placeholder: '���磺�����ж����������硢�·��ṹ����ʲ�졢����������', rows: 2 },
-        { key: 'output', label: 'ϣ������', placeholder: '�����Ǽ� + �������� + �ж���ʾ', rows: 1 },
+        { key: 'grade', label: '学段', placeholder: '请选择学段', rows: 1, options: ['小学高年级', '初中', '高中', '大学通识', '成人自学', '不确定'] },
+        { key: 'textbook', label: '教材或版本', placeholder: '例如：统编版九上 / 校本拓展 / 社团课', rows: 1 },
+        { key: 'materialType', label: '材料类型', placeholder: '请选择材料类型', rows: 1, options: ['单首诗', '单首词', '组诗', '词牌专题', '诗人专题', '课堂活动设计'] },
+        { key: 'studentLevel', label: '学习基础', placeholder: '请选择学习基础', rows: 1, options: ['初学', '有基础', '备考复习', '社团拓展', '不确定'] },
+        { key: 'background', label: '使用场景', placeholder: '例如：公开课、社团课、自学带读、课前导入、专题拓展。', rows: 2 },
+        { key: 'material', label: '诗词原文或材料', placeholder: '粘贴篇目、原文、注释、已有教案或你想讲清的问题。没有完整材料时，请至少写明篇目。', rows: 5 },
+        { key: 'goal', label: '本次讲读重点', placeholder: '例如：声情诵读、意象脉络、章法结构、典故查检、主问题链。', rows: 2 },
+        { key: 'output', label: '希望产出', placeholder: '讲读骨架 + 主问题链 + 诵读提示', rows: 1 },
       ] satisfies WorkbenchField[],
     };
   }
 
   if (expertId === 'zhiyuan-laoshi') {
     return {
-      title: '��ɽ��ʦ �� ��ѧ��ҵ��ѧ�滮����̨',
-      intro: '���滮�������̲����⣺����ʡ��λ�Ρ���ͥ�ֽ�����Ŀ����С�רҵ���ɺ;�ҵ���ߣ����жϳ��ȱ���רҵ���ڡ���ѧ�ر�����ñܿ��Ŀӡ�',
-      button: '���滮�߼���һ��',
-      prompt: '����ݱ�ɽ��ʦ����̨��Ϣ�����滮�����߼�����ѧ����ҵ����ѧ�жϣ��ȿ�Ӳ�������ٷ�����ͥ���������ٴӾ�ҵ���ڵ���ѧУ��רҵ�����к���ѧͶ�롣��Ҫ��������Ҫƽ������������������ȱ�/��̭�����ӡ��������ݺ���һ���ж���',
-      outputFallback: '���ȱ����� + ��̭���� + �������� + ��һ���ж�',
+      title: '升学就业留学规划工作台',
+      intro: '把省份、位次、选科、预算、目标城市、备选学校专业和家庭承压能力放进来，先做风险分层，再判断路径。',
+      button: '开始路径判断',
+      prompt: '请根据升学就业留学规划工作台信息，先把用户条件整理成约束表，再判断学校、专业、城市、考研、就业或留学路径的风险与收益。',
+      outputFallback: '路径判断 + 风险清单 + 下一步',
       fields: [
-        { key: 'materialType', label: '�����ʲô', placeholder: '��ѡ��������', rows: 1, control: 'chips', options: ['�߿�־Ը�', '������У��רҵ', '����רҵѡ��', '��ҵ/ת��ѡ��', '��ѧ��������Ŀ', '������ѧУȡ��', '���з�������'] },
-        { key: 'grade', label: '��ǰ�ڵ�', placeholder: '��ѡ��ǰ�ڵ�', rows: 1, options: ['��һ/�߶�ѡ��', '��������ǰ', '�����ѳ���', '���Ƶ��꼶', '���ƴ���/����', '������У', '����/����', 'Ӧ����ְ', '��ְת��', '��ѧ����ǰ', '����¼ȡ/offer'] },
-        { key: 'clientName', label: '����˭', placeholder: 'һ�仰����������/������/�о���/Ӧ����/��ְ���Ա��д���ҳ�����Ҳд�����������ϸ����������ﻯ����˫�Ǵ���Ů�����뿼�С�', rows: 2 },
-        { key: 'region', label: 'ʡ��λ�������', placeholder: '�߿�дʡ�ݡ�������λ�Ρ�ѡ�ƣ�����/��ҵд���ڳ��к�Ŀ����У���ѧдĿ�����/�����ͻع�/��������', rows: 3 },
-        { key: 'studentLevel', label: 'Ӳʵ���˱�', placeholder: '����λ�Ρ�ѧУ�㼶��רҵ�����㡢Ӣ��/��˼�и���������ʵϰ����Ŀ����ͥ��Դ�ܲ����еס�û�о�д��û�С���', rows: 4 },
-        { key: 'clientBackground', label: '��ͥ�ֽ������Դ�ɱ�', placeholder: '��ѡ��ӽ���һ�������ٲ���ϸ�ڡ�', rows: 1, control: 'chips', options: ['��ͨ��ͥ�����Դ�', 'һ��10������', 'һ��10-30��', 'һ��30-60��', '60�����Ͽɳ���', '�ܽ��ܸ���/��ս', '���ܳ����Ѳ�', '����ҵ��Դ�е�', '��ȫû����'] },
-        { key: 'background', label: '��������ѡ·��', placeholder: '�Ѻ�ѡ·��д�� A/B/C��ѧУ+רҵ+����+ѧ��/ʱ��ɱ�+��Ϊʲô���ᡣû�к�ѡҲд��ǰ�뷨��', rows: 4 },
-        { key: 'material', label: 'ԭʼ����/��ѡ�嵥', placeholder: 'ճ��ԺУרҵ�顢�����ƻ�������λ�Ρ�����ԺУ����ѧ��Ŀ��offer����λJD����ҵ��������ժҪ�����ϴ��ļ���', rows: 7 },
-        { key: 'situation', label: '�ܽ��� / ������', placeholder: '�ɶ�ѡ�����Ҳ���ֶ����䡣', rows: 1, control: 'multi', options: ['�ܽ��ܿ���', '�ܽ�������', '�ܽ��ܳ���', '�ܽ��ܼӰ�', '�ܽ��ܽ���/���ֳ�', '�ܽ���д����', '�ܽ��ܶ���', '�ܽ��ܶ���', '��Ҫ����', '����ҽѧ������', '�������Ŀ�', '��������н', '���뿪��ʡ', '�����ܸ߷�����ҵ'] },
-        { key: 'goal', label: '��һ���ȼ�', placeholder: '��ѡ������Ҫ��һ��', rows: 1, control: 'chips', options: ['�ȶ���ҵ', '��н����', '������', '�������', '�ر���', '����/����', '��ѧ���', '��ҽ�', '���Ӳ�����'] },
-        { key: 'output', label: 'Ҫʲô���', placeholder: '��ѡ�񽻸�����', rows: 1, control: 'chips', options: ['���ȱ���', 'רҵ��ڰ�', '��ѧ�ر���', '����ԺУ�ݶ�', 'ת�п�����', '����һ�仰����'] },
+        { key: 'materialType', label: '任务类型', placeholder: '请选择任务类型', rows: 1, options: ['高考志愿', '考研择校', '专业选择', '城市选择', '就业倒推', '留学回本', '转专业/转行'] },
+        { key: 'region', label: '省份/城市', placeholder: '例如：河南考生、江苏南京、目标去上海', rows: 1 },
+        { key: 'grade', label: '当前阶段', placeholder: '例如：高三、准大一、大三、毕业一年、准备考研', rows: 1 },
+        { key: 'studentLevel', label: '分数/位次/背景', placeholder: '例如：物化生，省排 28000；双非一本，会计专业；雅思 6.5。', rows: 3 },
+        { key: 'clientBackground', label: '家庭约束', placeholder: '预算、是否能复读/二战、能否接受外地、家庭现金流、最坏情况承受力。', rows: 3 },
+        { key: 'material', label: '备选方案/材料', placeholder: '粘贴志愿表、学校专业清单、留学项目、就业目标、已有资料或你正在纠结的几个选择。', rows: 6 },
+        { key: 'goal', label: '本次决策目标', placeholder: '例如：保就业、冲学校层级、避开天坑、判断留学值不值、考研和就业二选一。', rows: 2 },
+        { key: 'output', label: '希望产出', placeholder: '路径判断 + 风险清单 + 下一步', rows: 1, options: ['冲稳保分层', '专业红黑判断', '学校/城市/专业对照表', '考研胜率与替代路径', '留学回本线', '就业倒推行动清单'] },
       ] satisfies WorkbenchField[],
     };
   }
 
-  const isMindfulness = expertId === 'anran-laoshi';
+  const isMindfulness = expertId === 'thich-nhat-hanh';
   if (isMindfulness) {
     return {
-      title: '״̬�������̨',
-      intro: '����ѯ�ߡ�������ѹ����Դ����������ȷŽ��������������ڵײ��ϴ���',
-      button: '�ù���̨��ʼ����',
-      prompt: '�����״̬�������̨��Ϣ���������ǰ����ͷ��ձ߽磬�ٸ�����ִ�в��衣',
-      outputFallback: '״̬���� + �������',
+      title: '正念舒缓工作台',
+      intro: '把咨询者、背景、压力来源和身体感受先放进来，附件可以在底部上传。',
+      button: '用工作台开始安顿',
+      prompt: '请根据正念舒缓工作台信息，先安抚咨询者，再给出可跟做的正念练习。',
+      outputFallback: '安抚语言 + 正念练习步骤',
       fields: [
-        { key: 'clientName', label: '��ѯ������', placeholder: '���� / �ƺ�����磺С�֡�����ʦ����������', rows: 1 },
-        { key: 'clientBackground', label: '��ѯ�߱���', placeholder: '��ݡ�����Ρ�ְҵ/ѧϰ״̬��������������磺����ѧ�����������ѹ���󣻴�ҵ�ߣ�����ʧ�ߡ�', rows: 3 },
-        { key: 'background', label: '��ǰ����', placeholder: '���ڷ�����ʲô����Ҫѹ����������˯��������ʲô��', rows: 3 },
-        { key: 'material', label: '��������봥����', placeholder: '���磺�ؿڽ��ͷ���͡��羱Ӳ���պ��˳��ꡢ˯ǰ����ͣ��������', rows: 3 },
-        { key: 'goal', label: 'ϣ��״̬', placeholder: 'ϣ������ʱ�ﵽʲô״̬�����磺��˯�����������Ȳ������ܼ������¡�', rows: 2 },
-        { key: 'output', label: '��������', placeholder: '���磺״̬���� + 3���Ӳ��� / ˯ǰ������� / ������ϰ����', rows: 1 },
+        { key: 'clientName', label: '咨询者姓名', placeholder: '姓名 / 称呼，例如：小林、王老师、孩子妈妈', rows: 1 },
+        { key: 'clientBackground', label: '咨询者背景', placeholder: '身份、年龄段、职业/学习状态、最近处境。例如：初三学生，最近考试压力大；创业者，连续失眠。', rows: 3 },
+        { key: 'background', label: '当前困扰', placeholder: '现在发生了什么？主要压力、情绪或睡眠问题是什么？', rows: 3 },
+        { key: 'material', label: '身体感受与触发点', placeholder: '例如：胸口紧、头很胀、肩颈硬、刚和人吵完、睡前脑子停不下来。', rows: 3 },
+        { key: 'goal', label: '希望状态', placeholder: '希望结束时达到什么状态？例如：能睡、缓下来、先不崩、能继续做事。', rows: 2 },
+        { key: 'output', label: '希望产出', placeholder: '例如：安抚语言 + 3分钟呼吸练习 / 睡前安顿步骤 / 步行禅引导词', rows: 1 },
       ] satisfies WorkbenchField[],
     };
   }
 
   return {
-    title: '���Թ���̨',
-    intro: '�ѱ�����Ŀ��Ͳ����ȷŽ��������������ڵײ��ϴ���',
-    button: '�ù���̨��ʼ�ж�',
-    prompt: '��������Թ���̨��Ϣ���жϹؼ����⣬�ٸ����顣',
-    outputFallback: '�жϽ��� + �ж��嵥',
+    title: '智脑工作台',
+    intro: '把背景、目标和材料先放进来，附件可以在底部上传。',
+    button: '用工作台开始判断',
+    prompt: '请根据智脑工作台信息先判断关键问题，再给建议。',
+    outputFallback: '判断结论 + 行动清单',
     fields: [
-      { key: 'background', label: '����', placeholder: '������ʲô�����ڿ������', rows: 3 },
-      { key: 'goal', label: 'Ŀ��', placeholder: '����õ�ʲô�жϻ�����', rows: 3 },
-      { key: 'material', label: '����Ҫ��', placeholder: '�Ѹ�������ص㡢������������֪��ʵд���䡣', rows: 3 },
-      { key: 'output', label: 'ϣ������', placeholder: '�жϽ��� + �ж��嵥', rows: 1 },
+      { key: 'background', label: '背景', placeholder: '发生了什么？现在卡在哪里？', rows: 3 },
+      { key: 'goal', label: '目标', placeholder: '你想得到什么判断或结果？', rows: 3 },
+      { key: 'material', label: '材料要点', placeholder: '把附件里的重点、限制条件或已知事实写几句。', rows: 3 },
+      { key: 'output', label: '希望产出', placeholder: '判断结论 + 行动清单', rows: 1 },
     ] satisfies WorkbenchField[],
   };
 }
@@ -857,7 +1144,7 @@ function AttachmentList({ attachments, dark = false }: { attachments?: Attachmen
             href={href}
             target="_blank"
             rel="noreferrer"
-            className={`block overflow-hidden rounded border text-left ${dark ? 'border-white/20 bg-white/10' : 'border-stone-200 bg-stone-50'}`}
+            className={`block overflow-hidden rounded-2xl border text-left ${dark ? 'border-white/20 bg-white/10' : 'border-stone-200 bg-stone-50'}`}
           >
             {isImage ? (
               <img src={href} alt={item.name} className="max-h-60 w-full object-cover" />
@@ -882,19 +1169,20 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
   const [conversationExpert, setConversationExpert] = useState({ conversationId, expertId });
   const [creditBlocked, setCreditBlocked] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [activeQingheWork, setActiveQingheWork] = useState<QingheWorkId>('lesson-plan');
   const [activeTeacherBoard, setActiveTeacherBoard] = useState<TeacherBoardId>('correction');
   const [activeTeacherWorkflow, setActiveTeacherWorkflow] = useState<TeacherWorkflowId>('essay-correction');
-  const [activeYunqiaoTeachingBoard, setActiveYunqiaoTeachingBoard] = useState<YunqiaoTeachingBoardId>('reading');
-  const [activeYunqiaoTeachingWorkflow, setActiveYunqiaoTeachingWorkflow] = useState<YunqiaoTeachingWorkflowId>('content-decision');
+  const [activeRongshengBoard, setActiveRongshengBoard] = useState<RongshengBoardId>('reading');
+  const [activeRongshengWorkflow, setActiveRongshengWorkflow] = useState<RongshengWorkflowId>('content-decision');
   const [activePoetryBoard, setActivePoetryBoard] = useState<PoetryBoardId>('lesson');
   const [activePoetryWorkflow, setActivePoetryWorkflow] = useState<PoetryWorkflowId>('lesson-plan');
   const [activePreconsultTask, setActivePreconsultTask] = useState<MinghengFawuTaskId>(DEFAULT_MINGHENG_FAWU_TASK);
-  const [activeAnranLaoshiTask, setActiveAnranLaoshiTask] = useState<AnranLaoshiTaskId>(DEFAULT_ANRAN_LAOSHI_TASK);
-  const [activeAnranLaoshiSubOption, setActiveAnranLaoshiSubOption] = useState(() => getDefaultAnranLaoshiSubOption(getAnranLaoshiTask(DEFAULT_ANRAN_LAOSHI_TASK)));
-  const [activeJinlunTask, setActiveJinlunTask] = useState<SongbaiXianshengTaskId>(DEFAULT_SONGBAI_XIANSHENG_TASK);
-  const [jinlunValues, setJinlunValues] = useState<SongbaiXianshengValues>({ ageStage: '', constitutionFocus: '', dietaryPreference: '', familyLimit: '', material: '', goal: '', output: '' });
-  const [activeMeiguiTask, setActiveMeiguiTask] = useState<MuheLaoshiTaskId>(DEFAULT_MUHE_LAOSHI_TASK);
-  const [meiguiValues, setMeiguiValues] = useState<MuheLaoshiValues>({
+  const [activeAnranTask, setActiveAnranTask] = useState<AnranLaoshiTaskId>(DEFAULT_ANRAN_LAOSHI_TASK);
+  const [activeAnranSubOption, setActiveAnranSubOption] = useState(() => getDefaultAnranLaoshiSubOption(getAnranLaoshiTask(DEFAULT_ANRAN_LAOSHI_TASK)));
+  const [activeSongbaiTask, setActiveSongbaiTask] = useState<SongbaiXianshengTaskId>(DEFAULT_SONGBAI_XIANSHENG_TASK);
+  const [songbaiValues, setSongbaiValues] = useState<SongbaiXianshengValues>({ ageStage: '', constitutionFocus: '', dietaryPreference: '', familyLimit: '', material: '', goal: '', output: '' });
+  const [activeMuheTask, setActiveMuheTask] = useState<MuheLaoshiTaskId>(DEFAULT_MUHE_LAOSHI_TASK);
+  const [muheValues, setMuheValues] = useState<MuheLaoshiValues>({
     ageStage: '',
     childGender: '',
     childGrade: '',
@@ -908,6 +1196,10 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
   });
   const [teacherLibraryOpen, setTeacherLibraryOpen] = useState(true);
   const [preconsultLibraryOpen, setPreconsultLibraryOpen] = useState(true);
+  const [qingheWorkspacePrompts, setQingheWorkspacePrompts] = useState<Set<string>>(() => new Set());
+  const [qinghePreviewMessageIds, setQinghePreviewMessageIds] = useState<Set<string>>(() => new Set());
+  const [qingheWorkspaceSending, setQingheWorkspaceSending] = useState(false);
+  const qingheWorkspacePromptsRef = useRef<Set<string>>(new Set());
 
   const activeExpertId = conversationExpert.conversationId === conversationId ? conversationExpert.expertId : expertId;
   const [workbenchState, setWorkbenchState] = useState(() => ({
@@ -917,27 +1209,30 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
 
   const meta = useMemo(() => getExpertDisplay(activeExpertId), [activeExpertId]);
   const displayExpertName = activeExpertId === expertId ? expertName : meta.alias;
-  const isMindfulness = activeExpertId === 'anran-laoshi';
-  const isQingheWriting = activeExpertId === 'qinghe-xiezuo';
+  const isMindfulness = activeExpertId === 'thich-nhat-hanh';
+  const isQingheXiezuo = activeExpertId === 'qinghe-xiezuo';
   const isYunqiaoJiaoxue = activeExpertId === 'yunqiao-jiaoxue';
   const isSongyueShici = activeExpertId === 'songyue-shici';
-  const isBingshan = activeExpertId === 'zhiyuan-laoshi';
+  const isZhiyuanLaoshi = activeExpertId === 'zhiyuan-laoshi';
   const isPreconsult = activeExpertId === 'mingheng-fawu';
-  const isStructuredTeacher = isQingheWriting || isYunqiaoJiaoxue || isSongyueShici;
   const isAnranLaoshi = activeExpertId === 'anran-laoshi';
   const isSongbaiXiansheng = activeExpertId === 'songbai-xiansheng';
   const isMuheLaoshi = activeExpertId === 'muhe-laoshi';
+  const isStructuredTeacher = isQingheXiezuo || isYunqiaoJiaoxue || isSongyueShici;
   const workbenchCopy = useMemo(() => getWorkbenchCopy(activeExpertId), [activeExpertId]);
   const workbench = workbenchState.expertId === activeExpertId ? workbenchState.values : getInitialWorkbench(activeExpertId);
   const teacherWorkflow = TEACHER_WORKFLOWS[activeTeacherWorkflow];
-  const yunqiaoTeachingWorkflow = YUNQIAO_TEACHING_WORKFLOWS[activeYunqiaoTeachingWorkflow];
+  const rongshengWorkflow = RONGSHENG_WORKFLOWS[activeRongshengWorkflow];
   const poetryWorkflow = POETRY_WORKFLOWS[activePoetryWorkflow];
   const preconsultTask = getMinghengFawuTask(activePreconsultTask);
-  const anranLaoshiTask = getAnranLaoshiTask(activeAnranLaoshiTask);
-  const anranLaoshiCopy = getAnranLaoshiWorkbenchCopy(activeAnranLaoshiTask);
+  const anranTask = getAnranLaoshiTask(activeAnranTask);
+  const anranCopy = getAnranLaoshiWorkbenchCopy(activeAnranTask);
+  const songbaiTask = getSongbaiXianshengTask(activeSongbaiTask);
+  const muheTask = getMuheLaoshiTask(activeMuheTask);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const streamingRef = useRef('');
+  const tempMessageCounterRef = useRef(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -960,7 +1255,7 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
       } catch {
         if (!active) return;
         setMessagesError(true);
-        showToast('��Ϣ����ʧ��');
+        showToast('消息加载失败');
       } finally {
         if (active) setMessagesLoading(false);
       }
@@ -985,30 +1280,14 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
     }));
   };
 
-  const updateAnranLaoshiWorkbenchValue = (key: AnranLaoshiFieldKey, value: string) => {
-    setWorkbenchState(prev => ({
-      expertId: activeExpertId,
-      values: {
-        ...(prev.expertId === activeExpertId ? prev.values : getInitialWorkbench(activeExpertId)),
-        [key]: value,
-      },
-    }));
-  };
-
-  const selectAnranLaoshiTask = (taskId: AnranLaoshiTaskId) => {
-    const task = getAnranLaoshiTask(taskId);
-    setActiveAnranLaoshiTask(taskId);
-    setActiveAnranLaoshiSubOption(getDefaultAnranLaoshiSubOption(task));
-  };
-
   const switchTeacherBoard = (board: TeacherBoardId) => {
     setActiveTeacherBoard(board);
     setActiveTeacherWorkflow(WORKFLOWS_BY_BOARD[board][0]);
   };
 
-  const switchYunqiaoTeachingBoard = (board: YunqiaoTeachingBoardId) => {
-    setActiveYunqiaoTeachingBoard(board);
-    setActiveYunqiaoTeachingWorkflow(YUNQIAO_TEACHING_WORKFLOWS_BY_BOARD[board][0]);
+  const switchRongshengBoard = (board: RongshengBoardId) => {
+    setActiveRongshengBoard(board);
+    setActiveRongshengWorkflow(RONGSHENG_WORKFLOWS_BY_BOARD[board][0]);
   };
 
   const switchPoetryBoard = (board: PoetryBoardId) => {
@@ -1016,43 +1295,84 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
     setActivePoetryWorkflow(POETRY_WORKFLOWS_BY_BOARD[board][0]);
   };
 
-  const structuredBoards = isSongyueShici ? POETRY_BOARDS : isYunqiaoJiaoxue ? YUNQIAO_TEACHING_BOARDS : TEACHER_BOARDS;
-  const structuredWorkflow = isSongyueShici ? poetryWorkflow : isYunqiaoJiaoxue ? yunqiaoTeachingWorkflow : teacherWorkflow;
-  const structuredHeaderTitle = isSongyueShici ? '��������ʫ�ʽ�ѧ����̨' : isYunqiaoJiaoxue ? '������ʦ��ѧ���ݹ���̨' : '���д����ѧ����̨';
+  const structuredBoards = isSongyueShici ? POETRY_BOARDS : isYunqiaoJiaoxue ? RONGSHENG_BOARDS : TEACHER_BOARDS;
+  const structuredWorkflow = isSongyueShici ? poetryWorkflow : isYunqiaoJiaoxue ? rongshengWorkflow : teacherWorkflow;
+  const structuredHeaderTitle = isSongyueShici ? '松月先生诗词教学工作台' : isYunqiaoJiaoxue ? '云桥老师教学内容工作台' : '青禾老师写作批改工作台';
   const structuredHeaderHint = isSongyueShici
-    ? '�����������򣬲��Ͽ��ʫ��ԭ�ġ�ע�ͺͽ̰����м����ɽ����Ρ����������ж���ơ�'
+    ? '任务树定方向，材料库放诗词原文、注释和教案，中间生成讲读课、主问题与诵读设计。'
     : isYunqiaoJiaoxue
-    ? 'Χ�ƽ̰���˵�θ塢���ָ����ϸĸ壬�ȶ���ѧ���ݣ������ɿɽ������ϡ�'
-    : '�����������򣬲��Ͽ⹩���ݣ��м����ɳ�Ʒ����������';
+    ? '围绕教案、说课稿、逐字稿和诊断改稿，先定教学内容，再生成可交付材料。'
+    : '左侧选批改、备课或教研任务，中间生成结构化成品，右侧继续沟通。';
   const structuredEmptyHint = isSongyueShici
-    ? '��ѡ���ó�Ʒ��ʫ�ʽ����������ģ��ٷ���ƪĿ��ԭ�ġ�ע�͡��̰������Ҫ��'
+    ? '先选课堂成品、诗词讲读或材料诊改，再放入篇目、原文、注释、教案或课堂要求。'
     : isYunqiaoJiaoxue
-    ? '��ѡ�̰���˵�θ塢���ָ����ϸĸ壬�ٷ�����ġ���Ԫ����κ��⡢�̰�����ơ�'
-    : '�����ѡ���������Ҳ�������ġ��̰������塢˵�θ���زġ���ʼ���������ʾ������ɵĳ�Ʒ���޸������';
+    ? '先选教案、说课稿、逐字稿或诊断改稿，再放入课文、单元导语、课后题、教案或活动设计。'
+    : '先在左侧选任务，再把作文、教案、讲义、说课稿或素材放到右侧。开始后，这里显示可复制、可下载的批改稿、讲义或教研成品。';
+  const structuredAccent = isQingheXiezuo
+    ? {
+        page: 'bg-[#f4f7f5]',
+        header: 'border-[#dce7e1] bg-[#fbfdfb]/88',
+        panel: 'border-[#dce7e1] bg-white',
+        soft: 'bg-[#f7faf8]',
+        taskActive: 'bg-[#245f55] text-white',
+        taskSubActive: 'bg-[#e5f1ec] text-[#1f5a50]',
+        taskBorder: 'border-[#dce7e1]',
+        hover: 'hover:border-[#87b8a8] hover:bg-[#f8fbf9]',
+        focus: 'focus:border-[#245f55]',
+        primary: 'bg-[#245f55] hover:bg-[#1f4f48]',
+        ink: 'text-[#245f55]',
+        chip: 'bg-[#f9e8e6] text-[#a43f39]',
+        body: 'bg-[#f7faf8]',
+        panelRadius: 'rounded-lg',
+        controlRadius: 'rounded-md',
+        chipRadius: 'rounded-md',
+        avatarRadius: 'rounded-md',
+        shadow: 'shadow-sm',
+      }
+    : {
+        page: 'bg-[#f7f4ee]',
+        header: 'border-stone-200/70 bg-[#fffaf2]/82',
+        panel: 'border-stone-200/80 bg-[#fffaf2]/86',
+        soft: 'bg-[#fbf6ee]',
+        taskActive: 'bg-[#2f251d] text-white',
+        taskSubActive: 'bg-[#f0e4d3] text-[#5c3d24]',
+        taskBorder: 'border-[#eadfce]',
+        hover: 'hover:border-[#d8c5aa] hover:bg-[#fffdf8]',
+        focus: 'focus:border-[#8a5a35]',
+        primary: 'bg-[#2f251d] hover:bg-[#4a3728]',
+        ink: 'text-[#8a5a35]',
+        chip: 'bg-[#f3eadc] text-[#7a4c2c]',
+        body: 'bg-[#fbf8f2]',
+        panelRadius: 'rounded-[22px]',
+        controlRadius: 'rounded-xl',
+        chipRadius: 'rounded-full',
+        avatarRadius: 'rounded-2xl',
+        shadow: 'shadow-[0_14px_36px_rgba(80,64,42,0.06)]',
+      };
   const structuredQuestions = isSongyueShici ? SONGYUE_SHICI_QUESTIONS : isYunqiaoJiaoxue ? YUNQIAO_JIAOXUE_QUESTIONS : QINGHE_WRITING_QUESTIONS;
   const getStructuredWorkflows = (boardId: string) => (
     isSongyueShici
       ? POETRY_WORKFLOWS_BY_BOARD[boardId as PoetryBoardId]
       : isYunqiaoJiaoxue
-      ? YUNQIAO_TEACHING_WORKFLOWS_BY_BOARD[boardId as YunqiaoTeachingBoardId]
+      ? RONGSHENG_WORKFLOWS_BY_BOARD[boardId as RongshengBoardId]
       : WORKFLOWS_BY_BOARD[boardId as TeacherBoardId]
   );
   const getStructuredWorkflow = (workflowId: string) => (
     isSongyueShici
       ? POETRY_WORKFLOWS[workflowId as PoetryWorkflowId]
       : isYunqiaoJiaoxue
-      ? YUNQIAO_TEACHING_WORKFLOWS[workflowId as YunqiaoTeachingWorkflowId]
+      ? RONGSHENG_WORKFLOWS[workflowId as RongshengWorkflowId]
       : TEACHER_WORKFLOWS[workflowId as TeacherWorkflowId]
   );
   const isStructuredBoardActive = (boardId: string) => (
-    isSongyueShici ? activePoetryBoard === boardId : isYunqiaoJiaoxue ? activeYunqiaoTeachingBoard === boardId : activeTeacherBoard === boardId
+    isSongyueShici ? activePoetryBoard === boardId : isYunqiaoJiaoxue ? activeRongshengBoard === boardId : activeTeacherBoard === boardId
   );
   const isStructuredWorkflowActive = (workflowId: string) => (
-    isSongyueShici ? activePoetryWorkflow === workflowId : isYunqiaoJiaoxue ? activeYunqiaoTeachingWorkflow === workflowId : activeTeacherWorkflow === workflowId
+    isSongyueShici ? activePoetryWorkflow === workflowId : isYunqiaoJiaoxue ? activeRongshengWorkflow === workflowId : activeTeacherWorkflow === workflowId
   );
   const selectStructuredBoard = (boardId: string) => {
     if (isSongyueShici) switchPoetryBoard(boardId as PoetryBoardId);
-    else if (isYunqiaoJiaoxue) switchYunqiaoTeachingBoard(boardId as YunqiaoTeachingBoardId);
+    else if (isYunqiaoJiaoxue) switchRongshengBoard(boardId as RongshengBoardId);
     else switchTeacherBoard(boardId as TeacherBoardId);
   };
   const selectStructuredWorkflow = (boardId: string, workflowId: string) => {
@@ -1060,8 +1380,8 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
       setActivePoetryBoard(boardId as PoetryBoardId);
       setActivePoetryWorkflow(workflowId as PoetryWorkflowId);
     } else if (isYunqiaoJiaoxue) {
-      setActiveYunqiaoTeachingBoard(boardId as YunqiaoTeachingBoardId);
-      setActiveYunqiaoTeachingWorkflow(workflowId as YunqiaoTeachingWorkflowId);
+      setActiveRongshengBoard(boardId as RongshengBoardId);
+      setActiveRongshengWorkflow(workflowId as RongshengWorkflowId);
     } else {
       setActiveTeacherBoard(boardId as TeacherBoardId);
       setActiveTeacherWorkflow(workflowId as TeacherWorkflowId);
@@ -1069,34 +1389,114 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
   };
 
   const buildUserMessage = (text: string) => {
-    if (isQingheWriting) {
+    if (isZhiyuanLaoshi) {
       return [
         text.trim(),
         '',
-        `����̹���̨ �� ${TEACHER_BOARDS.find(item => item.id === teacherWorkflow.board)?.label} �� ${teacherWorkflow.label}��`,
-        `�꼶��${workbench.grade || 'δ��д'}`,
-        `������${workbench.region || 'δ��д'}`,
-        `�̲İ汾��${workbench.textbook || 'δ��д'}`,
-        `ѧ��ˮƽ��${workbench.studentLevel || 'δ��д'}`,
-        `��������${teacherWorkflow.title}`,
-        `����������${workbench.background || 'δ��д'}`,
-        `����Ҫ��${workbench.goal || 'δ��д'}`,
-        `ϣ��������${workbench.output || 'δ��д'}`,
+        '【知远老师工作台 · 升学就业留学规划】',
+        `任务类型：${workbench.materialType || '未填写'}`,
+        `省份/城市：${workbench.region || '未填写'}`,
+        `当前阶段：${workbench.grade || '未填写'}`,
+        `分数/位次/背景：${workbench.studentLevel || '未填写'}`,
+        `家庭约束：${workbench.clientBackground || '未填写'}`,
+        `本次目标：${workbench.goal || '未填写'}`,
+        `希望产出：${workbench.output || workbenchCopy.outputFallback}`,
         '',
-        `��${teacherWorkflow.materialLabel}��`,
-        workbench.material || 'δ��д',
+        '【备选方案/材料】',
+        workbench.material || '未填写',
         '',
-        '��������ָ�',
-        teacherWorkflow.prompt,
+        '【工作流指令】',
+        '先把条件整理成约束表：分数位次/背景、家庭预算、城市偏好、专业禁忌、就业底线、最坏情况。再判断学校、专业、城市、考研、就业或留学路径的收益与风险。能给分层就分成“能冲、可稳、能保、该淘汰、千万别碰”；不能精确判断时说明缺哪些数据，不编造分数线或就业数据。',
         '',
-        '������ṹ��',
-        ...teacherWorkflow.outputStructure.map((item, index) => `${index + 1}. ${item}`),
+        '【边界要求】',
+        '不承诺录取，不编造院校分数线，不替代官方招生章程、学校招生办、签证律师、职业咨询和财务规划。缺少省份、位次、预算或目标时，只做方向判断，并列出必须补充的信息。',
+      ].join('\n');
+    }
+
+    if (isAnranLaoshi) {
+      return buildAnranLaoshiMessage(
+        activeAnranTask,
+        activeAnranSubOption,
+        {
+          situation: workbench.background || '',
+          original_words: workbench.material || '',
+          output: workbench.output || anranCopy.outputFallback,
+        },
+        text,
         '',
-        '����Ʒ��λ��',
-        '������߷���һ����ʦ��������ʦ����Ҫ�������д����ѧ�������ˡ����Ĳ���ͨ�ô�д�����������ġ��زġ����塢˵�θ塢�̰�������κ�ͨ�����������Щ���ƻ�е�Ĺ������Ⱦ������д������̨���жϣ��ٱ����ʦ��ֱ��ʹ�õĳ�Ʒ��������ʦ�ɰ��ظ��ɸ��Ͷ�����ȥ��һ����ʦ�ɽ�ר�ҿ������ȡ�ᡢ�ṹ�Ϳ������������',
+        anranCopy.outputFallback || anranTask.outputOptions[0],
+      );
+    }
+
+    if (isSongbaiXiansheng) {
+      return text.trim();
+    }
+
+    if (isMuheLaoshi) {
+      return text.trim();
+    }
+
+  if (isQingheXiezuo) {
+      const recentWorkspaceAnswer = (() => {
+        let nextAssistantBelongsToWorkspace = false;
+        let last = '';
+        for (const message of messages) {
+          if (message.role === 'user') {
+            nextAssistantBelongsToWorkspace = qingheWorkspacePromptsRef.current.has(message.content.trim());
+            continue;
+          }
+          if (message.role === 'assistant' && nextAssistantBelongsToWorkspace) {
+            last = message.content;
+            nextAssistantBelongsToWorkspace = false;
+          }
+        }
+        return last;
+      })();
+      if (!qingheWorkspacePromptsRef.current.has(text.trim())) {
+        return [
+          text.trim() || '请查看附件，并像作文教学同事一样给出建议。',
+          '',
+          '【对话定位】',
+          '这是右侧自由聊天区。请像作文教学同事一样回应，可以讨论取舍、指出风险、帮老师继续修改中间生成的成品；不要把它当成新的复杂任务入口。',
+          recentWorkspaceAnswer ? '\n【中间主功能区最近生成稿】' : '',
+          recentWorkspaceAnswer || '',
+        ].join('\n').trim();
+      }
+      const work = QINGHE_WORKS.find(item => item.id === activeQingheWork) || QINGHE_WORKS[0];
+      const requestedText = text.trim() || work.prompt;
+      return [
+        requestedText,
         '',
-        '���߽�Ҫ��',
-        '�����ֶζ�����գ�����û��ϴ��˸������������Ķ��������Ѹ������ɱ��ι��������Ĳ��ϡ�ֻ���������ġ����Ľ�����д����ѧ���زİ������塢˵�θ塢�̰�������κ�ͨ����ʦ���������ع�������Ҫ��λΪ����ȫ��ר�ң���Ҫð���ʡ�ٷ��ľ��׼�����ϲ���ʱ�Ȼ����Ѹ����ϲ������ð汾���ٱ�ע��Ҫ��ʦ�������ʵ��',
+        `【青禾老师工作台 · ${work.label}】`,
+        `使用场景：${workbench.background || '未填写'}`,
+        `年级：${workbench.grade || '未填写'}`,
+        `地区：${workbench.region || '未填写'}`,
+        `教材版本：${workbench.textbook || '未填写'}`,
+        `作文题/训练主题：${workbench.prompt || '未填写'}`,
+        `文体/类型：${workbench.materialType || '未填写'}`,
+        `班型：${workbench.classType || '未填写'}`,
+        `学生水平：${workbench.studentLevel || '未填写'}`,
+        `课时：${workbench.lessonDuration || '未填写'}`,
+        `本次目标：${workbench.specificGoal || workbench.goal || '未填写'}`,
+        `当前任务：${work.title}`,
+        `希望产出：${workbench.output || work.output}`,
+        `补充说明：${workbench.goal || '未填写'}`,
+        '',
+        '【老师已有材料 / 学生作文 / 课程资料】',
+        workbench.material || workbench.text || '未填写',
+        '',
+        '【任务指令】',
+        '用户可能通过点选教学条件、自然语言补充、上传附件或粘贴材料来表达需求。请综合判断，不要让用户理解内部工作流；信息不足时先给可用假设版，再列出需要确认的事实。',
+        work.prompt,
+        '',
+        '【输出结构】',
+        ...work.structure.map((item, index) => `${index + 1}. ${item}`),
+        '',
+        '【产品定位】',
+        '这个工具服务一线语文老师、作文老师、教培老师和需要独立完成写作教学交付的人。产品入口允许新手老师通过点选和填空生成成品，也允许有经验老师用自然语言或上传资料表达需求。青禾老师的写作教学判断用于背后的取舍，不作为用户必须理解的工作流名称。',
+        '',
+        '【边界要求】',
+        '所有字段都可留空；如果用户上传了附件，请优先阅读附件，把附件当成本次任务核心材料。只做作文批改、作文讲评、写作课程训练、素材整理、出题设计、课后反馈和写作教学资料转化相关工作；不要定位为语文全科专家，不要冒充各省官方阅卷标准；材料不足时先基于已给材料产出可用版本，再标注需要老师确认的事实；不要替学生写整篇可提交作文。',
       ].join('\n');
     }
 
@@ -1104,31 +1504,31 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
       return [
         text.trim(),
         '',
-        `��������ʦ����̨ �� ${YUNQIAO_TEACHING_BOARDS.find(item => item.id === yunqiaoTeachingWorkflow.board)?.label} �� ${yunqiaoTeachingWorkflow.label}��`,
-        `�꼶��${workbench.grade || 'δ��д'}`,
-        `������${workbench.region || 'δ��д'}`,
-        `�̲İ汾��${workbench.textbook || 'δ��д'}`,
-        `���ͣ�${workbench.materialType || 'δ��д'}`,
-        `ѧ�飺${workbench.studentLevel || 'δ��д'}`,
-        `��������${yunqiaoTeachingWorkflow.title}`,
-        `����������${workbench.background || 'δ��д'}`,
-        `��������${workbench.goal || 'δ��д'}`,
-        `ϣ��������${workbench.output || 'δ��д'}`,
+        `【云桥老师工作台 · ${RONGSHENG_BOARDS.find(item => item.id === rongshengWorkflow.board)?.label} · ${rongshengWorkflow.label}】`,
+        `年级：${workbench.grade || '未填写'}`,
+        `地区：${workbench.region || '未填写'}`,
+        `教材版本：${workbench.textbook || '未填写'}`,
+        `课型：${workbench.materialType || '未填写'}`,
+        `学情：${workbench.studentLevel || '未填写'}`,
+        `工作流：${rongshengWorkflow.title}`,
+        `公共背景：${workbench.background || '未填写'}`,
+        `本次困惑：${workbench.goal || '未填写'}`,
+        `希望产出：${workbench.output || '未填写'}`,
         '',
-        `��${yunqiaoTeachingWorkflow.materialLabel}��`,
-        workbench.material || 'δ��д',
+        `【${rongshengWorkflow.materialLabel}】`,
+        workbench.material || '未填写',
         '',
-        '��������ָ�',
-        yunqiaoTeachingWorkflow.prompt,
+        '【工作流指令】',
+        rongshengWorkflow.prompt,
         '',
-        '������ṹ��',
-        ...yunqiaoTeachingWorkflow.outputStructure.map((item, index) => `${index + 1}. ${item}`),
+        '【输出结构】',
+        ...rongshengWorkflow.outputStructure.map((item, index) => `${index + 1}. ${item}`),
         '',
-        '����Ʒ��λ��',
-        '������߷���һ��������ʦ��������ͽ��౸�θ����ˡ����Ĳ��Ǵ�дƯ���̰���������������ʦ�����Ŀγ����ѧ�ۿ�ܣ�������ʦ�ж�һ�ڿκ��˵����Ľ�ѧ������ʲô����Щ���ݲ��ý̡�Ŀ��ͻ�Ƿ�һ�¡�',
+        '【产品定位】',
+        '这个工具服务一线语文老师、教研组和教培备课负责人。核心不是代写漂亮教案，而是用语文教学内容判断框架，帮助老师判断一节课合宜的语文教学内容是什么、哪些内容不该教、目标和活动是否一致。',
         '',
-        '���߽�Ҫ��',
-        '�����ֶζ�����գ�����û��ϴ��˸������������Ķ��������Ѹ������ɱ��ι��������Ĳ��ϡ�ֻ�����Ľ�ѧ�����жϡ�������ݡ�����������ϡ����ûȡ�ᡢ����ĥ���뵥Ԫ���룻ѧ�����ĳ�ƪ��ɫ����������������ת����̣���ѧ�ı�ϸ��������������ϸ����ʾֻ��֤�ݳ���ʱ���ƴ������Ҫð��ٷ��α����Ȩ��������ھ���������ʦ���˼�ʱ�����',
+        '【边界要求】',
+        '所有字段都可留空；如果用户上传了附件，请优先阅读附件，把附件当成本次工作流核心材料。只做语文教学内容判断、备课理据、课型内容诊断、课堂活动取舍、评课磨课与单元对齐；学生作文成篇润色、旁批、讲评话术转给青禾老师；文学文本细读主链和主问题细读演示转给文本细读工作台。不要冒充官方课标解释权、命题组口径或任何现实人物的即时意见。',
       ].join('\n');
     }
 
@@ -1136,77 +1536,30 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
       return [
         text.trim(),
         '',
-        `��������������̨ �� ${POETRY_BOARDS.find(item => item.id === poetryWorkflow.board)?.label} �� ${poetryWorkflow.label}��`,
-        `ѧ�Σ�${workbench.grade || 'δ��д'}`,
-        `�̲Ļ�汾��${workbench.textbook || 'δ��д'}`,
-        `�������ͣ�${workbench.materialType || 'δ��д'}`,
-        `ѧϰ������${workbench.studentLevel || 'δ��д'}`,
-        `��������${poetryWorkflow.title}`,
-        `ʹ�ó�����${workbench.background || 'δ��д'}`,
-        `���ν����ص㣺${workbench.goal || 'δ��д'}`,
-        `ϣ��������${workbench.output || 'δ��д'}`,
+        `【松月先生工作台 · ${POETRY_BOARDS.find(item => item.id === poetryWorkflow.board)?.label} · ${poetryWorkflow.label}】`,
+        `学段：${workbench.grade || '未填写'}`,
+        `教材或版本：${workbench.textbook || '未填写'}`,
+        `材料类型：${workbench.materialType || '未填写'}`,
+        `学习基础：${workbench.studentLevel || '未填写'}`,
+        `工作流：${poetryWorkflow.title}`,
+        `使用场景：${workbench.background || '未填写'}`,
+        `本次讲读重点：${workbench.goal || '未填写'}`,
+        `希望产出：${workbench.output || '未填写'}`,
         '',
-        `��${poetryWorkflow.materialLabel}��`,
-        workbench.material || 'δ��д',
+        `【${poetryWorkflow.materialLabel}】`,
+        workbench.material || '未填写',
         '',
-        '��������ָ�',
+        '【工作流指令】',
         poetryWorkflow.prompt,
         '',
-        '������ṹ��',
+        '【输出结构】',
         ...poetryWorkflow.outputStructure.map((item, index) => `${index + 1}. ${item}`),
         '',
-        '����Ʒ��λ��',
-        '������Է���һ��������ʦ�Ĺŵ�ʫ�ʽ�ѧ��������ʦ�ѵ��׻���ʫ�ʴ��ж����顢�����·����˷��ж�����ʲ��Ϳ����������Ͻ�������γɿ��ϿεĽ���������',
+        '【产品定位】',
+        '这个智脑服务一线语文老师的古典诗词教学：帮助老师把单首或组诗词从诵读声情、意象章法、兴发感动、典故查检和课堂主问题上讲清楚，形成可上课的讲读方案。',
         '',
-        '���߽�Ҫ��',
-        '�����ֶζ�����գ�����û��ϴ��˸������������Ķ��������Ѹ������ɱ��ι��������Ĳ��ϡ�ֻ����ŵ�ʫ�ʽ�����ʫ�ʼ��͡���ѧ���������ſΡ��̰���������������������ƣ���Ҫ���������ġ��ִ����Ķ�����ģ�塢�������ķ��빤�ߡ���ƪ��д������������ϲ���ʱ�Ȼ����Ѹ�ƪĿ�������������г���Ҫ�����ԭ�ġ�ע�ͻ�̲���Ϣ��',
-      ].join('\n');
-    }
-
-    if (isBingshan) {
-      return [
-        text.trim(),
-        '',
-        '����ɽ��ʦ����̨��',
-        `�������ͣ�${workbench.materialType || 'δ��д'}`,
-        `ѧ��/��ְ�������${workbench.clientName || 'δ��д'}`,
-        `��ǰ�׶Σ�${workbench.grade || 'δ��д'}`,
-        `������Ŀ����У�${workbench.region || 'δ��д'}`,
-        `�ɼ�/ѧ��/��������${workbench.studentLevel || 'δ��д'}`,
-        `��ͥ������Ԥ�㣺${workbench.clientBackground || 'δ��д'}`,
-        `��ǰ���᣺${workbench.background || 'δ��д'}`,
-        `��ѡ����/���ϣ�${workbench.material || 'δ��д'}`,
-        `��ҵ/רҵ��������ܶȣ�${workbench.situation || 'δ��д'}`,
-        `��صĽ����${workbench.goal || 'δ��д'}`,
-        `ϣ��������${workbench.output || workbenchCopy.outputFallback}`,
-        '',
-        '������̨��λ��',
-        '������ѧ����ҵ����ѧ�滮����̨�����Ĳ��ǰ�ο�û������ǰ�ʡ��λ�Ρ�ѧУ�㼶��רҵ���ݡ����л��ᡢ��ͥ�ֽ�������ҵ��λ������ѧ�ر����ڡ����ճ�����������һ�ű������ͨ��ͥ��ִ�е��жϡ�',
-        '',
-        '����ɽ��ʦ�滮�ж�Э�顿',
-        '1. �����ؼ�׷�ʡ����ʡ��λ��/��ͥԤ��/Ŀ�����/��ѡ����/���յ���ȱʧ�����׷�� 3 ����Ҫ�������⣻����Ҫֱ�ӡ��ɻش�',
-        '2. �ȷּ�ͥ����ͨ��ͥ�����Դ��ͥ����Դ�ͼ�ͥ��������ȫ��ͬ����ͨ��ͥ����ȷ���ԡ���ҵ���ڡ�������źͻر��ٶȡ�',
-        '3. �߿�־Ը����ʡ��λ�� -> ���� -> ѧУ�㼶 -> רҵ���� -> ��ҵ���� -> ���ȱ����жϡ��������ֳ塢�ȡ������桢������',
-        '4. ������У�������Ƴ��� -> �������� -> �������ӷ��� -> רҵ���Ѷ� -> ���к͵�ʦ -> ������·���жϡ���ֻ����У�⻷��',
-        '5. רҵѡ�񰴡��������ݡ���ҵ�桢�Ƿ��ѧ�����Ƿ������ж������Ƿ��ʺ���ͨ��ͥ��AI������ա��жϡ�',
-        '6. ��ҵ/ת�а������䡢ѧ�����ֽ�������Ǩ�Ƽ��ܡ���λ�ż�����ҵ���ڡ���ͨ�������ȥ���жϡ�',
-        '7. ��ѧ�����ܻ��ѡ�ѧУ�Ͽɶȡ�רҵ��ҵ��ǩ֤/���θ��ʡ��ع�����������ͥ�ر�ѹ�����жϡ�Ԥ��Խ�������ˣ�����̸��У�Ρ�',
-        '8. ��������ԺУ��רҵ�顢���ߡ������ߡ�н�ʡ�ǩ֤����ҵ���棬���������û����������ݣ�û����������ʱ�������嵥�����ܱ����֡�',
-        '9. ��Ҫ�������Ħ����Ҫ˵���ʺ��Լ��ľ�����õġ���Ҫ˵���������·����׬���������������ܰ���ͨ��ͥ����ˮ��',
-        '',
-        '������ṹ��',
-        '1. �ȸ�һ��ݽ��ۣ��Ƽ�/����/������/�Ȳ����ݡ�',
-        '2. �ؼ�����ȱ�ڣ�ֻ�л�ı���۵ı�����',
-        '3. ��ͥ�����жϣ���ͨ��ͥ�Ƿ񿸵�ס���������ʲô��',
-        '4. ���������/��/��/��/����������/�ư�/�ڰ�ÿ��д���ɡ�',
-        '5. ��ҵ���ƣ���ͨ��ҵ���м�50%��ȥ��ѧ���ż������л��ᡢ������ԡ�',
-        '6. ��ѧ/���лر��ߣ��ܳɱ���ʱ��ɱ����ر�ѹ�����ع�/���η��ա�',
-        '7. ���ӣ�ֻ����Ҫ���� 1-3 ���ӡ�',
-        '8. ������ʵ���ݣ�����λ�Ρ���ҵ�������桢н����λ���������ʡ����и�¼�ȡ�ǩ֤/�������ߵȡ�',
-        '9. ��һ������������������� 3 ���¡�',
-        '',
-        '�����Է��',
-        '�̾䡢ֱ�ӡ���ʵ����滮�����������жϡ�����˵���ȿ�Ӳ����������ͨ��ͥ�����ˡ�������ͱ����������öԱȣ��ٽ���ʣ��ི��ҵ��н�ʡ����С��ɱ���ѧ��ɸ�ӺͿ�����ԡ���Ҫ�����Ҫ��¶��ʵԭ����������Ҫ��ʾ������Ȩ��',
+        '【边界要求】',
+        '所有字段都可留空；如果用户上传了附件，请优先阅读附件，把附件当成本次工作流核心材料。只处理古典诗词讲读、诗词鉴赏、自学带读、社团课、教案讲稿诊改与课堂主问题设计；不要接作文批改、现代文阅读赋分模板、泛文言文翻译工具、整篇代写赏析发表。材料不足时先基于已给篇目谨慎讲读，并列出需要补充的原文、注释或教材信息。',
       ].join('\n');
     }
 
@@ -1214,66 +1567,64 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
       return [
         text.trim(),
         '',
-        `������Ԥ��ѯ����̨ �� ${preconsultTask.label}��`,
-        `����λ��${preconsultTask.headline}`,
-        `����˵����${preconsultTask.description}`,
-        `��ѯ����ݣ�${workbench.clientName || 'δ��д'}`,
-        `�Է����/��ϵ��${workbench.clientBackground || 'δ��д'}`,
-        `����/��Ͻ������${workbench.region || 'δ��д'}`,
-        `�¼���չ��${workbench.materialType || 'δ��д'}`,
-        `��ʵ����/ʱ���ߣ�${workbench.background || 'δ��д'}`,
-        `����֤��/���ϣ�${workbench.material || 'δ��д'}`,
-        `��ǰ����/���ȡ�ж���${workbench.goal || 'δ��д'}`,
-        `ϣ��������${workbench.output || preconsultTask.resultHint}`,
-        'ģ��·�ɽ��飺���� deepseek-chat ������Ϣ�ռ������������һ��Ԥ��ѯ�������ʵ���ӡ�������ߡ��漰����/��ȫ/�̳�/��������/�෽����/����׷�����޷��жϣ�Ӧ���� deepseek-reasoner ���ṹ�������',
+        `【明衡顾问法律预咨询工作台 · ${preconsultTask.label}】`,
+        `任务定位：${preconsultTask.headline}`,
+        `场景说明：${preconsultTask.description}`,
+        `咨询者身份：${workbench.clientName || '未填写'}`,
+        `对方身份/关系：${workbench.clientBackground || '未填写'}`,
+        `地区/管辖线索：${workbench.region || '未填写'}`,
+        `事件进展：${workbench.materialType || '未填写'}`,
+        `事实经过/时间线：${workbench.background || '未填写'}`,
+        `已有证据/材料：${workbench.material || '未填写'}`,
+        `当前诉求/拟采取行动：${workbench.goal || '未填写'}`,
+        `希望产出：${workbench.output || preconsultTask.resultHint}`,
+        '模型路由建议：先由 deepseek-chat 负责信息收集、初步分类和一般预咨询；如果事实复杂、争议金额高、涉及刑事/保全/继承/婚姻家事/多方主体/多轮追问仍无法判断，应升级 deepseek-reasoner 做结构化推理。',
         '',
-        '�����α��뽻����',
+        '【本次必须交付】',
         ...PRECONSULT_OUTPUT_STRUCTURE.map((item, index) => `${index + 1}. ${item}`),
         '',
-        '����ǰ����������ص㡿',
+        '【当前事项的整理重点】',
         ...preconsultTask.outputStructure.map((item, index) => `${index + 1}. ${item}`),
         '',
-        '����Ʒ��λ��',
-        '���Ƿ���Ԥ��ѯ����̨��Ŀ�겻�������ʦ������ʽ�����������������ʽ��ѯ���ٲá�Ͷ�ߡ�ƽ̨���ߡ�Э�̹�֮ͨǰ������ʵ��֤�ݡ����ձ߽硢����˳��Ϳɸ��Ʋ�������ɿɽ������ϡ�',
+        '【产品定位】',
+        '这是明衡顾问法律预咨询工作台。目标不是替代律师出具正式法律意见，而是在正式咨询、仲裁、投诉、平台申诉、协商沟通之前，把事实、证据、风险边界、处理顺序和可复制材料整理成可交付材料。',
         '',
-        '������Ҫ��',
-        '���Ա���רҵ�����ơ��͹ۣ���ʹ����ҵ�ڻ������ӻ�������������ǡ���Ҫֻ�����������������Ȱ��û�����������ɿ�ִ�в��ϣ���Ϣ����ʱ����׷�ʹؼ���ʵ�����׷�� 3 �����⣻���������Ϣ�㹻��ֱ�Ӹ�������жϣ���������Щ���ۻ�����ʵ�仯�������߷��������ֻ˵������ʦ������Ҫ�г���ʲô����ȥ����ʲô���⡢��ǰ����ͣʲô���',
+        '【工作要求】',
+        '语言必须专业、克制、客观，不使用行业黑话、段子化表达或情绪化措辞。不要只做免责声明。必须先把用户的叙事整理成可执行材料；信息不足时优先追问关键事实，最多追问 3 个问题；如果已有信息足够，直接给假设版判断，并标明哪些结论会随事实变化。遇到高风险事项，不只说“找律师”，还要列出带什么材料去、问什么问题、当前先暂停什么事项。',
         '',
-        '���߽�Ҫ��',
-        'ֻ��һ����������֤�����������׼������ͨ�ı����������飻��ð����ʦ����Ժ����ܲ��Ż��κιٷ�����������ŵ��������̹�ܷ��ɡ�α��֤�ݡ���в��������й¶��˽�����Ͷ�ߡ��漰���¡������������ش��ͬ���������¡�δ�����ˡ�ҽ�ơ���˽й¶���羳����ʱ�������г�רҵȷ���嵥��',
+        '【边界要求】',
+        '只做一般风险梳理、证据整理、材料准备、沟通文本和渠道建议；不冒充律师、法院、监管部门或任何官方机构；不承诺结果；不教规避法律、伪造证据、威胁、网暴、泄露隐私或恶意投诉。涉及刑事、行政处罚、重大合同、婚姻家事、未成年人、医疗、隐私泄露、跨境事项时，必须列出专业确认清单。',
       ].join('\n');
     }
 
-    if (isAnranLaoshi) {
-      return buildAnranLaoshiMessage(
-        activeAnranLaoshiTask,
-        activeAnranLaoshiSubOption,
-        workbench as unknown as AnranLaoshiWorkbenchValues,
-        text,
-        anranLaoshiCopy.prompt,
-        anranLaoshiCopy.outputFallback,
-      );
-    }
-
-    if (isMuheLaoshi) {
-      return text.trim() || [
-        '��õ����ʦ����̨��',
-        '����ݵ�ǰ���������жԻ�������ͥ���������ӹ�ϵ�����޹����ͳɳ��߽����жϡ�',
-        '����̶����������жϡ���Դ��������������ô��������/��ͥ�ֹ����ѡ�ʲô���Ҫ��רҵ������',
+    if (isMindfulness) {
+      return [
+        text.trim(),
+        '',
+        `【${workbenchCopy.title}】`,
+        `咨询者姓名：${workbench.clientName || '未填写'}`,
+        `咨询者背景：${workbench.clientBackground || '未填写'}`,
+        `当前困扰：${workbench.background || '未填写'}`,
+        `希望状态：${workbench.goal || '先稳定下来'}`,
+        `身体感受与触发点：${workbench.material || '未填写'}`,
+        `希望产出：${workbench.output || workbenchCopy.outputFallback}`,
+        '',
+        '【输出要求】',
+        '请先安抚，再给一个可跟做的正念练习。不要诊断，不要说教，不要给太多道理。',
       ].join('\n');
     }
 
     const parts = [
       text.trim(),
       '',
-      '�����Թ���̨��',
-      `������${workbench.background || 'δ��д'}`,
-      `Ŀ�꣺${workbench.goal || 'δ��д'}`,
-      `����Ҫ�㣺${workbench.material || 'δ��д'}`,
-      `ϣ��������${workbench.output || workbenchCopy.outputFallback}`,
+      '【智脑工作台】',
+      `背景：${workbench.background || '未填写'}`,
+      `目标：${workbench.goal || '未填写'}`,
+      `材料要点：${workbench.material || '未填写'}`,
+      `希望产出：${workbench.output || workbenchCopy.outputFallback}`,
       '',
-      '�����Ҫ��',
-      '����ʹ�� Markdown ���ͼƬ����ʽ����ʽ���� LaTeX������ $...$��������ʽ $$...$$��',
+      '【输出要求】',
+      '可以使用 Markdown 表格、图片、公式。公式请用 LaTeX：行内 $...$，独立公式 $$...$$。',
     ];
     return parts.join('\n');
   };
@@ -1281,10 +1632,10 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
   const chooseFiles = (files: FileList | null) => {
     if (!files) return;
     const incoming = Array.from(files);
-    if (isQingheWriting && incoming.some(file => file.type.startsWith('image/'))) {
-      showToast('ͼƬɨ�����Ľ��� 2.0 �� SVIP �û����š���ǰ����ճ�����ֻ��ϴ��ɶ�ȡ�ĵ���');
+    if (isQingheXiezuo && incoming.some(file => file.type.startsWith('image/'))) {
+      showToast('图片扫描批改将在 2.0 向 SVIP 用户开放。当前可先粘贴文字或上传可读取文档。');
     }
-    const readableFiles = isQingheWriting ? incoming.filter(file => !file.type.startsWith('image/')) : incoming;
+    const readableFiles = isQingheXiezuo ? incoming.filter(file => !file.type.startsWith('image/')) : incoming;
     const next = [...pendingFiles, ...readableFiles].slice(0, 6);
     setPendingFiles(next);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -1293,6 +1644,8 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
   const sendText = async (text: string) => {
     if ((!text.trim() && pendingFiles.length === 0) || sending) return;
 
+    const trimmedText = text.trim();
+    const isQingheWorkspaceRequest = isQingheXiezuo && qingheWorkspacePromptsRef.current.has(trimmedText);
     abortRef.current?.abort();
     setCreditBlocked(false);
     setSending(true);
@@ -1301,7 +1654,8 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
     streamingRef.current = '';
 
     const filesToSend = [...pendingFiles];
-    const tempId = `${TEMP_ID_PREFIX}${Date.now()}`;
+    tempMessageCounterRef.current += 1;
+    const tempId = `${TEMP_ID_PREFIX}${tempMessageCounterRef.current}`;
     const tempAttachments = filesToSend.map((file, index) => ({
       id: `${tempId}-${index}`,
       name: file.name,
@@ -1316,7 +1670,7 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
       {
         id: tempId,
         role: 'user',
-        content: text.trim() || '��鿴�����������жϡ�',
+        content: trimmedText || '请查看附件并给出判断。',
         attachments: tempAttachments,
         createdAt: new Date().toISOString(),
       },
@@ -1326,9 +1680,12 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
     try {
       uploaded = filesToSend.length > 0 ? await uploadAttachments(token, conversationId, filesToSend) : [];
     } catch (err) {
-      showToast(err instanceof Error ? err.message : '�����ϴ�ʧ��');
+      showToast(err instanceof Error ? err.message : '附件上传失败');
       setMessages(prev => prev.filter(m => m.id !== tempId));
       setPendingFiles(filesToSend);
+      if (isQingheWorkspaceRequest) {
+        setQingheWorkspaceSending(false);
+      }
       setSending(false);
       return;
     }
@@ -1344,26 +1701,165 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
       },
       messageId => {
         const finalContent = streamingRef.current;
+        const sentMessageId = `${Date.now()}-sent`;
+        if (isQingheWorkspaceRequest) {
+          setQinghePreviewMessageIds(prev => new Set(prev).add(messageId));
+        }
         setMessages(prev => [
-          ...prev.map(m => (m.id === tempId ? { ...m, id: `${Date.now()}-sent`, attachments: uploaded } : m)),
+          ...prev.map(m => (m.id === tempId ? { ...m, id: sentMessageId, attachments: uploaded } : m)),
           { id: messageId, role: 'assistant', content: finalContent, attachments: [], createdAt: new Date().toISOString() },
         ]);
         setStreamingContent('');
+        if (isQingheWorkspaceRequest) {
+          setQingheWorkspaceSending(false);
+        }
         setSending(false);
         inputRef.current?.focus();
       },
       err => {
-        if (err.includes('���ֲ���') || err.includes('credits')) setCreditBlocked(true);
+        if (err.includes('积分不足') || err.includes('credits')) setCreditBlocked(true);
         showToast(err);
         setStreamingContent('');
+        if (isQingheWorkspaceRequest) {
+          setQingheWorkspaceSending(false);
+        }
         setSending(false);
         inputRef.current?.focus();
       },
     );
   };
 
+  const copyAssistantMessage = (content: string) => {
+    navigator.clipboard.writeText(content);
+    showToast('已复制', 'info');
+  };
+
+  if (isAnranLaoshi) {
+    const anranValues = {
+      situation: workbench.background || '',
+      original_words: workbench.material || '',
+      output: workbench.output || anranCopy.outputFallback,
+    };
+
+    return (
+      <div className="flex h-screen flex-col overflow-hidden bg-[#f7f2e8] text-stone-950">
+        <header className="shrink-0 border-b border-stone-200/70 bg-[#fffaf2]/86 px-4 py-2.5 shadow-[0_1px_20px_rgba(80,64,42,0.05)] backdrop-blur-xl">
+          <div className="mx-auto flex max-w-[1280px] items-center gap-3">
+            <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded-full border border-stone-200 bg-white/85 text-lg text-stone-600 shadow-sm transition hover:bg-white" title="返回">←</button>
+            <button onClick={onOpenHome} className="rounded-full border border-stone-200 bg-white/85 px-4 py-2 text-sm font-black text-stone-700 shadow-sm transition hover:bg-white">首页</button>
+            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-2xl bg-[#ede3d4]">
+              <img src={meta.avatar} alt={meta.alias} className="h-full w-full object-cover" onError={event => { event.currentTarget.style.display = 'none'; }} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-base font-semibold text-stone-950">安然老师 · 咨询整理工作台</h1>
+              <p className="truncate text-xs text-stone-500">状态整理、沟通文本、冲突降温和短时练习。</p>
+            </div>
+            <button onClick={onOpenCredits} className="rounded-full border border-stone-200 bg-white/85 px-4 py-2 text-xs font-black text-stone-600 shadow-sm">积分</button>
+          </div>
+        </header>
+
+        <main className="mx-auto grid min-h-0 w-full max-w-[1280px] flex-1 grid-cols-[320px_minmax(0,1fr)] gap-3 p-3">
+          <aside className="flex min-h-0 flex-col overflow-hidden rounded-[22px] border border-stone-200/80 bg-[#fffaf2]/86 shadow-[0_14px_36px_rgba(80,64,42,0.06)]">
+            <div className="border-b border-stone-200/80 p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a5a35]">咨询事项</p>
+              <h2 className="mt-1 text-lg font-semibold text-stone-950">{anranCopy.title}</h2>
+              <p className="mt-1 text-xs leading-5 text-stone-500">{anranCopy.intro}</p>
+            </div>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+              <AnranLaoshiTaskPicker
+                value={activeAnranTask}
+                subOption={activeAnranSubOption}
+                onChange={taskId => {
+                  const task = getAnranLaoshiTask(taskId);
+                  setActiveAnranTask(taskId);
+                  setActiveAnranSubOption(getDefaultAnranLaoshiSubOption(task));
+                  updateWorkbenchValue('output', task.outputOptions[0] || '');
+                }}
+                onSubOptionChange={setActiveAnranSubOption}
+              />
+              {anranCopy.fields.map(field => {
+                const value = anranValues[field.key] || '';
+                const update = (next: string) => {
+                  if (field.key === 'situation') updateWorkbenchValue('background', next);
+                  else if (field.key === 'original_words') updateWorkbenchValue('material', next);
+                  else updateWorkbenchValue('output', next);
+                };
+                return (
+                  <label key={field.key} className="block rounded-2xl border border-[#eadfce] bg-white p-3">
+                    <span className="mb-2 block text-xs font-semibold text-stone-700">{field.label}</span>
+                    {field.options ? (
+                      <select value={value} onChange={event => update(event.target.value)} className="h-9 w-full rounded-xl border border-[#eadfce] bg-[#fffdf8] px-3 text-xs text-stone-800 outline-none focus:border-[#8a5a35]">
+                        <option value="">{field.placeholder}</option>
+                        {field.options.map(option => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    ) : (
+                      <textarea value={value} onChange={event => update(event.target.value)} placeholder={field.placeholder} rows={field.rows || 3} className="w-full resize-none rounded-xl border border-[#eadfce] bg-[#fffdf8] px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" />
+                    )}
+                  </label>
+                );
+              })}
+              <button onClick={() => sendText(anranCopy.prompt)} disabled={sending} className="w-full rounded-2xl bg-[#2f251d] px-4 py-3 text-sm font-black text-white shadow-sm transition hover:bg-[#4a3728] disabled:opacity-50">
+                {anranCopy.button}
+              </button>
+            </div>
+          </aside>
+
+          <section className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden rounded-[22px] border border-stone-200/80 bg-white shadow-[0_14px_36px_rgba(80,64,42,0.06)]">
+            <div className="min-h-0 overflow-y-auto bg-[#fbf8f2] p-4">
+              {creditBlocked && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">积分不足，暂时不能继续提问</div>}
+              {messagesLoading && <div className="py-16 text-center text-sm text-stone-400">加载中...</div>}
+              {messagesError && <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">消息加载失败，请返回重试。</div>}
+              {!messagesLoading && !messagesError && messages.length === 0 && !sending && (
+                <div className="flex h-full min-h-[420px] items-center justify-center rounded-2xl border border-dashed border-[#eadfce] bg-white/60 px-6 py-10 text-center">
+                  <div className="max-w-md">
+                    <p className="text-base font-semibold text-stone-900">{anranCopy.title}</p>
+                    <p className="mt-2 text-xs leading-6 text-stone-500">{anranCopy.intro}</p>
+                    <button onClick={() => sendText(anranCopy.prompt)} disabled={sending} className="mt-5 rounded-full bg-[#2f251d] px-4 py-2 text-xs font-semibold text-white shadow-sm disabled:opacity-40">{anranCopy.button}</button>
+                  </div>
+                </div>
+              )}
+              {messages.map(msg => {
+                const isUser = msg.role === 'user';
+                return (
+                  <div key={msg.id} className={`mb-4 flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-6 shadow-sm ${isUser ? 'rounded-br-sm bg-[#2f251d] text-white' : 'rounded-bl-sm border border-[#eadfce] bg-white text-stone-800'}`}>
+                      <MessageText content={msg.content} dark={isUser} />
+                      <AttachmentList attachments={msg.attachments} dark={isUser} />
+                      {!isUser && (
+                        <div className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3">
+                          <button onClick={() => copyAssistantMessage(msg.content)} className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-black text-stone-600 transition hover:bg-white">复制</button>
+                          <button onClick={() => downloadWordDocument(conversationTitle || anranCopy.title || 'AI 回答', msg.content)} className="rounded-lg border border-[#eadfce] bg-[#fbf6ee] px-3 py-1.5 text-xs font-black text-[#7a4c2c] transition hover:bg-white">下载 Word</button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {streamingContent && (
+                <div className="mb-4 flex justify-start">
+                  <div className="max-w-[88%] rounded-2xl rounded-bl-sm border border-[#eadfce] bg-white px-3.5 py-2.5 text-[13px] leading-6 text-stone-800 shadow-sm">
+                    <MessageText content={streamingContent} />
+                    <span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-[#8a5a35] align-middle" />
+                  </div>
+                </div>
+              )}
+              <div ref={bottomRef} />
+            </div>
+            <div className="border-t border-stone-200 bg-white p-2.5">
+              <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.txt,.md,.doc,.docx" onChange={event => chooseFiles(event.target.files)} className="hidden" />
+              <div className="flex gap-2">
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-stone-300 bg-white text-lg text-stone-700 shadow-sm transition hover:border-[#8a5a35] hover:text-[#8a5a35] disabled:opacity-40" title="上传附件">+</button>
+                <input ref={inputRef} type="text" value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => event.key === 'Enter' && sendText(input)} placeholder={sending ? '等待 AI 回复中...' : '补充情况、原话或要求'} className="min-w-0 flex-1 rounded-xl border border-stone-300 bg-white px-3 py-2 text-[13px] text-stone-900 outline-none placeholder:text-stone-400 focus:border-[#8a5a35] focus:ring-1 focus:ring-[#8a5a35]/20" />
+                <button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-stone-900 text-white shadow transition hover:bg-stone-800 disabled:opacity-40" title="发送补充">→</button>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
   if (isSongbaiXiansheng) {
-    const jinlunTask = getSongbaiXianshengTask(activeJinlunTask);
     return (
       <SongbaiXianshengWorkbench
         messages={messages}
@@ -1373,9 +1869,9 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
         streamingContent={streamingContent}
         creditBlocked={creditBlocked}
         input={input}
-        values={jinlunValues}
-        activeTaskId={activeJinlunTask}
-        task={jinlunTask}
+        values={songbaiValues}
+        activeTaskId={activeSongbaiTask}
+        task={songbaiTask}
         pendingFiles={pendingFiles}
         bottomRef={bottomRef}
         inputRef={inputRef}
@@ -1385,12 +1881,12 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
         onOpenCredits={onOpenCredits}
         onOpenHome={onOpenHome}
         onInputChange={setInput}
-        onValueChange={(key, value) => setJinlunValues(prev => ({ ...prev, [key]: value }))}
-        onTaskChange={setActiveJinlunTask}
+        onValueChange={(key, value) => setSongbaiValues(prev => ({ ...prev, [key]: value }))}
+        onTaskChange={setActiveSongbaiTask}
         onChooseFiles={chooseFiles}
         onRemovePendingFile={index => setPendingFiles(prev => prev.filter((_, i) => i !== index))}
         onSendText={sendText}
-        onCopy={content => { navigator.clipboard.writeText(content); showToast('�Ѹ���', 'info'); }}
+        onCopy={copyAssistantMessage}
         onDownloadWord={downloadWordDocument}
         renderMessageText={(content, dark) => <MessageText content={content} dark={dark} />}
         renderAttachments={(attachments, dark) => <AttachmentList attachments={attachments} dark={dark} />}
@@ -1399,7 +1895,6 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
   }
 
   if (isMuheLaoshi) {
-    const meiguiTask = getMuheLaoshiTask(activeMeiguiTask);
     return (
       <MuheLaoshiWorkbench
         messages={messages}
@@ -1409,9 +1904,9 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
         streamingContent={streamingContent}
         creditBlocked={creditBlocked}
         input={input}
-        values={meiguiValues}
-        activeTaskId={activeMeiguiTask}
-        task={meiguiTask}
+        values={muheValues}
+        activeTaskId={activeMuheTask}
+        task={muheTask}
         pendingFiles={pendingFiles}
         bottomRef={bottomRef}
         inputRef={inputRef}
@@ -1421,12 +1916,12 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
         onOpenCredits={onOpenCredits}
         onOpenHome={onOpenHome}
         onInputChange={setInput}
-        onValueChange={(key, value) => setMeiguiValues(prev => ({ ...prev, [key]: value }))}
-        onTaskChange={setActiveMeiguiTask}
+        onValueChange={(key, value) => setMuheValues(prev => ({ ...prev, [key]: value }))}
+        onTaskChange={setActiveMuheTask}
         onChooseFiles={chooseFiles}
         onRemovePendingFile={index => setPendingFiles(prev => prev.filter((_, i) => i !== index))}
         onSendText={sendText}
-        onCopy={content => { navigator.clipboard.writeText(content); showToast('�Ѹ���', 'info'); }}
+        onCopy={copyAssistantMessage}
         onDownloadWord={downloadWordDocument}
         renderMessageText={(content, dark) => <MessageText content={content} dark={dark} />}
         renderAttachments={(attachments, dark) => <AttachmentList attachments={attachments} dark={dark} />}
@@ -1434,396 +1929,113 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
     );
   }
 
-  if (isBingshan) {
-    const selectField = (key: WorkbenchFieldKey, label: string, placeholder: string, options: string[]) => (
-      <label className="block">
-        <span className="mb-1.5 block text-xs font-semibold text-stone-700">{label}</span>
-        <select value={workbench[key]} onChange={event => updateWorkbenchValue(key, event.target.value)} className="h-9 w-full rounded border border-black/10 bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#8a5a35]">
-          <option value="">{placeholder}</option>
-          {options.map(option => <option key={option} value={option}>{option}</option>)}
-        </select>
-      </label>
-    );
-    const textField = (key: WorkbenchFieldKey, label: string, placeholder: string, rows = 3) => (
-      <label className="block">
-        <span className="mb-1.5 block text-xs font-semibold text-stone-700">{label}</span>
-        <textarea value={workbench[key]} onChange={event => updateWorkbenchValue(key, event.target.value)} placeholder={placeholder} rows={rows} className="w-full resize-none rounded border border-black/10 bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" />
-      </label>
-    );
-    const addLimit = (value: string) => {
-      if (value) updateWorkbenchValue('situation', toggleMultiValue(workbench.situation, value));
-    };
-    const readLine = (key: WorkbenchFieldKey, label: string) => {
-      const line = workbench[key].split('\n').find(item => item.startsWith(`${label}��`));
-      return line ? line.slice(label.length + 1) : '';
-    };
-    const writeLine = (key: WorkbenchFieldKey, label: string, value: string) => {
-      const lines = workbench[key].split('\n').filter(Boolean);
-      const prefix = `${label}��`;
-      const next = lines.filter(item => !item.startsWith(prefix));
-      if (value.trim()) next.push(`${prefix}${value.trim()}`);
-      updateWorkbenchValue(key, next.join('\n'));
-    };
-    const compactInput = (key: WorkbenchFieldKey, label: string, placeholder: string) => (
-      <label className="block">
-        <span className="mb-1.5 block text-xs font-semibold text-stone-700">{label}</span>
-        <input
-          value={readLine(key, label)}
-          onChange={event => writeLine(key, label, event.target.value)}
-          placeholder={placeholder}
-          className="h-9 w-full rounded border border-black/10 bg-white px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]"
-        />
-      </label>
-    );
-    const compactSelect = (key: WorkbenchFieldKey, label: string, placeholder: string, options: string[]) => (
-      <label className="block">
-        <span className="mb-1.5 block text-xs font-semibold text-stone-700">{label}</span>
-        <select
-          value={readLine(key, label)}
-          onChange={event => writeLine(key, label, event.target.value)}
-          className="h-9 w-full rounded border border-black/10 bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#8a5a35]"
-        >
-          <option value="">{placeholder}</option>
-          {options.map(option => <option key={option} value={option}>{option}</option>)}
-        </select>
-      </label>
-    );
-
+  if (isZhiyuanLaoshi) {
     return (
-      <div className="flex h-screen flex-col overflow-hidden bg-[var(--bg)] text-stone-950">
-        <header className="shrink-0 border-b border-stone-200/80 bg-white/85 px-4 py-2.5 backdrop-blur-xl">
-          <div className="mx-auto flex max-w-[1440px] items-center gap-3">
-            <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded border border-stone-200 bg-white text-lg text-stone-600 transition hover:bg-[#faf8f4]" title="����">��</button>
-            <button onClick={onOpenHome} className="rounded border border-stone-200 bg-white px-4 py-2 text-sm font-semibold text-stone-700 transition hover:bg-[#faf8f4]">��ҳ</button>
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate text-base font-semibold text-stone-950">��ɽ��ʦ �� ��ѧ��ҵ��ѧ�滮����̨</h1>
-              <p className="truncate text-xs text-stone-500">�ȿ�Ӳ���������г��ȱ���רҵ���ڡ���ҵ���ƺ���ѧ�ر���</p>
+      <div className="flex h-screen flex-col overflow-hidden bg-[#f5f1e8] text-[#211f1b]">
+        <header className="shrink-0 border-b border-[#ded4c4] bg-[#fffaf0]/88 px-4 py-2.5 shadow-[0_1px_18px_rgba(64,48,28,0.06)] backdrop-blur-xl">
+          <div className="mx-auto flex max-w-[1380px] items-center gap-3">
+            <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded-lg border border-[#d8cdbb] bg-white/85 text-lg text-stone-600 shadow-sm transition hover:bg-white" title="返回">←</button>
+            <button onClick={onOpenHome} className="rounded-lg border border-[#d8cdbb] bg-white/85 px-3.5 py-2 text-xs font-semibold text-stone-700 shadow-sm transition hover:bg-white">首页</button>
+            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-[#d8cdbb] bg-[#efe6d6]">
+              <img src={meta.avatar} alt={meta.alias} className="h-full w-full object-cover" onError={event => { event.currentTarget.style.display = 'none'; }} />
             </div>
-            <button onClick={onOpenCredits} className="rounded border border-stone-200 bg-white px-4 py-2 text-xs font-semibold text-stone-600">����</button>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-base font-semibold text-[#211f1b]">知远老师 · 升学就业规划工作台</h1>
+              <p className="truncate text-xs text-stone-500">把分数、预算、城市、专业和就业出口放到同一张表里判断。</p>
+            </div>
+            <button onClick={onOpenCredits} className="rounded-lg border border-[#d8cdbb] bg-white/85 px-3.5 py-2 text-xs font-semibold text-stone-600 shadow-sm">积分</button>
           </div>
         </header>
 
-        <main className="mx-auto grid min-h-0 w-full max-w-[1440px] flex-1 grid-cols-[390px_minmax(0,1fr)] gap-3 p-3">
-          <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-stone-200/80 bg-white">
-            <div className="border-b border-stone-200/80 p-3">
-              <div className="flex items-center gap-3">
-                <div className="h-11 w-11 shrink-0 overflow-hidden rounded bg-[#f3eadc]"><img src={meta.avatar} alt={meta.alias} className="h-full w-full object-cover" onError={event => { event.currentTarget.style.display = 'none'; }} /></div>
-                <div className="min-w-0"><p className="text-[15px] font-semibold text-stone-950">�滮ɸѡ̨</p><p className="mt-0.5 truncate text-xs text-stone-500">����ѡ��Ϊ��������ֻ���ؼ���ʵ��</p></div>
-              </div>
+        <main className="mx-auto grid min-h-0 w-full max-w-[1380px] flex-1 grid-cols-[320px_minmax(0,1fr)_320px] gap-3 p-3">
+          <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-[#d8cdbb] bg-[#fffaf0]/88 shadow-[0_14px_34px_rgba(64,48,28,0.06)]">
+            <div className="border-b border-[#e4dacb] p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a6b38]">决策类型</p>
+              <h2 className="mt-1 text-[15px] font-semibold text-[#211f1b]">{workbench.materialType || '选择本次判断'}</h2>
             </div>
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3">
-              <section className="space-y-2.5 border-b border-black/8 pb-4">
-                <p className="text-[12px] font-semibold text-[#8a5a35]">��һ������������</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {selectField('materialType', '�����ʲô', 'ѡ��������', ['�߿�־Ը�', '������У��רҵ', '����רҵѡ��', '��ҵ/ת��ѡ��', '��ѧ��������Ŀ', '������ѧУȡ��', '���з�������'])}
-                  {selectField('grade', '��ǰ�ڵ�', 'ѡ��ǰ�ڵ�', ['��һ/�߶�ѡ��', '��������ǰ', '�����ѳ���', '���Ƶ��꼶', '���ƴ���/����', '������У', '����/����', 'Ӧ����ְ', '��ְת��', '��ѧ����ǰ', '����¼ȡ/offer'])}
-                </div>
-                {textField('clientName', '����˭', '�������ϸ����������ﻯ����˫�Ǵ���Ů�����뿼�У��ҳ��溢���ʡ�', 2)}
-              </section>
-              <section className="space-y-2.5 border-b border-black/8 pb-4">
-                <p className="text-[12px] font-semibold text-[#8a5a35]">�ڶ�����Ӳ����</p>
-                <div className="rounded border border-black/8 bg-[#fbfaf7] p-3">
-                  <p className="mb-2 text-xs font-semibold text-stone-800">��ѧ / �߿�����</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {compactSelect('region', '�߿�ʡ��', 'ѡ��ʡ��', ['����', '�Ϻ�', '���', '����', '�ӱ�', '����', 'ɽ��', '����', '�㽭', '�㶫', '����', '����', '����', '�Ĵ�', '����', 'ɽ��', '����', '����', '����', '����', '����', '����', '����', '������', '���ɹ�', '����', '����', '�½�', '�ຣ', '����', '����'])}
-                    {compactSelect('region', 'ѡ�����', 'ѡ��ѡ��', ['�ﻯ��', '�ﻯ��', '�ﻯ��', '������', '������', '������', '������', '������', '�Ŀ�', '���', '��ȷ��'])}
-                    {compactInput('region', '�߿�����', '����612')}
-                    {compactInput('region', 'ȫʡλ��', '����18500')}
-                    {compactSelect('region', 'Ŀ����в㼶', 'ѡ����в㼶', ['���Ϲ���', 'ǿ��һ��', 'ʡ�����', '������', '������', '��ʡ����', '��ҽ�����', '���в���'])}
-                    {compactInput('region', 'Ŀ�����', '�����Ͼ������ݡ��ɶ�')}
-                  </div>
-                </div>
-                <div className="rounded border border-black/8 bg-[#fbfaf7] p-3">
-                  <p className="mb-2 text-xs font-semibold text-stone-800">ѧ�� / �����˱�</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {compactSelect('studentLevel', '��ǰѧУ�㼶', 'ѡ��ѧУ�㼶', ['985', '211', '˫һ��', 'һ��', '����', '��챾��', 'ר��', '���Ȿ��', '����', '����'])}
-                    {compactInput('studentLevel', '��ǰרҵ', '�������������ѧ������')}
-                    {compactInput('studentLevel', '����/����', '����3.4/4��ǰ30%')}
-                    {compactSelect('studentLevel', 'Ӣ��ˮƽ', 'ѡ��Ӣ��ˮƽ', ['�ļ�δ��', '�ļ�', '����', '��˼6.0', '��˼6.5', '��˼7+', '�и�90+', '�и�100+', '��������'])}
-                    {compactSelect('studentLevel', 'ʵϰ��Ŀ', 'ѡ��ǿ��', ['û��', 'һ����ͨʵϰ', '�����������ʵϰ', '��/����ʵϰ', '������Ŀ', '������', '��Ʒ����ǿ'])}
-                    {compactSelect('studentLevel', '����/��ѧ����', 'ѡ�����', ['û׼��', '�տ�ʼ', '׼����������', '����ǿ', '����һ��', 'Ӣ���Ϻ���', '��ѧ�Ϻ���', 'רҵ��������'])}
-                  </div>
-                </div>
-                <details className="rounded border border-black/8 bg-white p-3">
-                  <summary className="cursor-pointer text-xs font-semibold text-stone-700">�鿴 / �ֶ�����Ӳ��������</summary>
-                  <div className="mt-3 grid gap-2">
-                    <textarea value={workbench.region} onChange={event => updateWorkbenchValue('region', event.target.value)} rows={4} className="w-full resize-none rounded border border-black/10 bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none focus:border-[#8a5a35]" />
-                    <textarea value={workbench.studentLevel} onChange={event => updateWorkbenchValue('studentLevel', event.target.value)} rows={4} className="w-full resize-none rounded border border-black/10 bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none focus:border-[#8a5a35]" />
-                  </div>
-                </details>
-              </section>
-              <section className="space-y-2.5 border-b border-black/8 pb-4">
-                <p className="text-[12px] font-semibold text-[#8a5a35]">����������ͥ����</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {selectField('clientBackground', 'Ԥ�㵵λ', 'ѡ���ͥ������', ['��ͨ��ͥ�����Դ�', 'һ��10������', 'һ��10-30��', 'һ��30-60��', '60�����Ͽɳ���', '�ܽ��ܸ���/��ս', '���ܳ����Ѳ�', '����ҵ��Դ�е�', '��ȫû����'])}
-                  {selectField('goal', '��һ���ȼ�', 'ֻ����ѡһ��', ['�ȶ���ҵ', '��н����', '������', '�������', '�ر���', '����/����', '��ѧ���', '��ҽ�', '���Ӳ�����'])}
-                </div>
-                <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold text-stone-700">�ܽ��� / ������</span>
-                  <select value="" onChange={event => addLimit(event.target.value)} className="h-9 w-full rounded border border-black/10 bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#8a5a35]">
-                    <option value="">��������������</option>
-                    {['�ܽ��ܿ���', '�ܽ�������', '�ܽ��ܳ���', '�ܽ��ܼӰ�', '�ܽ��ܽ���/���ֳ�', '�ܽ���д����', '�ܽ��ܶ���', '�ܽ��ܶ���', '��Ҫ����', '����ҽѧ������', '�������Ŀ�', '��������н', '���뿪��ʡ', '�����ܸ߷�����ҵ'].map(option => <option key={option} value={option}>{option}</option>)}
-                  </select>
-                  <textarea value={workbench.situation} onChange={event => updateWorkbenchValue('situation', event.target.value)} placeholder="��ѡ������ƻ���������Ҳ�����ֶ����䡣" rows={2} className="mt-2 w-full resize-none rounded border border-black/10 bg-[#fbfaf7] px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" />
-                </label>
-              </section>
-              <section className="space-y-2.5">
-                <p className="text-[12px] font-semibold text-[#8a5a35]">���Ĳ��������뽻��</p>
-                {textField('background', '��������ѡ·��', '�Ѻ�ѡ·��д�� A/B/C��ѧУ+רҵ+����+�ɱ�+Ϊʲô���ᡣ', 3)}
-                {textField('material', 'ԭʼ����/��ѡ�嵥', 'ճ��רҵ�顢����λ�Ρ�����ԺУ����ѧ��Ŀ��offer����λJD����ҵ��������ժҪ�����ϴ��ļ���', 5)}
-                {selectField('output', 'Ҫʲô���', 'ѡ�񽻸�����', ['���ȱ���', 'רҵ��ڰ�', '��ѧ�ر���', '����ԺУ�ݶ�', 'ת�п�����', '����һ�仰����'])}
-                <button onClick={() => sendText(workbenchCopy.prompt)} disabled={sending} className="w-full rounded bg-[#2f251d] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#4a3728] disabled:opacity-50">���滮�߼�����</button>
-              </section>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+              {['高考志愿', '考研择校', '专业选择', '城市选择', '就业倒推', '留学回本', '转专业/转行'].map(item => (
+                <button key={item} type="button" onClick={() => updateWorkbenchValue('materialType', item)} className={`w-full rounded-lg border px-3 py-2.5 text-left text-[13px] font-semibold transition ${workbench.materialType === item ? 'border-[#2b2721] bg-[#2b2721] text-white shadow-sm' : 'border-[#e3d8c7] bg-white text-stone-800 hover:border-[#cdbda6] hover:bg-[#fffdf8]'}`}>
+                  {item}
+                </button>
+              ))}
+              <div className="rounded-lg border border-[#ead8b7] bg-[#fff7e6] p-3 text-xs leading-5 text-[#7d5b25]">
+                <p className="font-semibold text-[#5f4218]">判断原则</p>
+                <p className="mt-1">先看约束，再谈理想；先算最坏情况，再决定冲不冲。</p>
+              </div>
             </div>
           </aside>
 
-          <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-md border border-stone-200/80 bg-white">
-            <div className="border-b border-stone-200 bg-white p-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0"><p className="text-[11px] font-semibold text-[#8a5a35]">�ж��� / ��ҵ����</p><h2 className="mt-1 text-lg font-semibold text-stone-950">�ȱ�ж��Լ����ȿ�����·��ͨ���ܲ�����ͨ</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-stone-500">ϵͳ��������������ش�����������ȱ�����̭����Ӻʹ�����ʵ���ݡ�</p></div>
-                <button type="button" onClick={() => fileInputRef.current?.click()} className="shrink-0 rounded border border-black/10 bg-[#fbfaf7] px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-white">�ϴ�����</button>
-              </div>
+          <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-[#d8cdbb] bg-white shadow-[0_14px_34px_rgba(64,48,28,0.06)]">
+            <div className="border-b border-[#e4dacb] bg-white p-4">
+              <p className="text-[11px] font-semibold text-[#8a6b38]">规划判断 / {workbench.materialType || '未选择'}</p>
+              <h2 className="mt-1 text-lg font-semibold text-[#211f1b]">{workbenchCopy.title}</h2>
+              <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-500">{workbenchCopy.intro}</p>
             </div>
-            <div className="min-h-0 overflow-y-auto bg-[#fbf8f2] p-3">
-              {creditBlocked && <div className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"><p className="font-semibold">���ֲ��㣬��ʱ���ܼ�������</p><button type="button" onClick={onOpenCredits} className="mt-2 rounded bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600">ȥ��������</button></div>}
-              {messagesLoading && <div className="py-16 text-center text-sm text-stone-400">������...</div>}
-              {messagesError && <div className="rounded border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">��Ϣ����ʧ�ܣ��뷵�����ԡ�</div>}
+            <div className="min-h-0 overflow-y-auto bg-[#faf7ef] p-3">
+              {creditBlocked && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">积分不足，暂时不能继续提问</div>}
+              {messagesLoading && <div className="py-16 text-center text-sm text-stone-400">加载中...</div>}
+              {messagesError && <div className="rounded border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">消息加载失败，请返回重试。</div>}
               {!messagesLoading && !messagesError && messages.length === 0 && !sending && (
-                <div className="flex h-full min-h-[420px] items-center justify-center rounded border border-dashed border-black/10 bg-white/60 px-6 py-10">
-                  <div className="max-w-xl text-center"><p className="text-[13px] font-semibold text-stone-600">��û����</p><p className="mt-2 text-xs leading-6 text-stone-400">��������������ѳ������ڵ㡢Ԥ������ȼ�ѡ���������ϲ�ȫҲ�ܿ��У������ȿ���ؼ���ȱ�ڡ�</p><div className="mt-5 grid gap-2 sm:grid-cols-2">{BINGSHAN_QUESTIONS.map(question => <button key={question} type="button" onClick={() => sendText(question)} className="rounded border border-black/10 bg-white px-3 py-2 text-left text-[11px] font-semibold leading-5 text-stone-600 transition hover:border-[#8a5a35] hover:text-[#2f251d]">{question}</button>)}</div><button onClick={() => sendText(workbenchCopy.prompt)} disabled={sending} className="mt-4 rounded bg-[#2f251d] px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">����ǰ��������</button></div>
-                </div>
-              )}
-              {messages.map(msg => { const isUser = msg.role === 'user'; return <div key={msg.id} className={`mb-4 flex ${isUser ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[88%] rounded px-3.5 py-2.5 text-[13px] leading-6 ${isUser ? 'rounded-br-sm bg-[#2f251d] text-white' : 'rounded-bl-sm border border-black/10 bg-white text-stone-800'}`}><MessageText content={msg.content} dark={isUser} /><AttachmentList attachments={msg.attachments} dark={isUser} />{!isUser && <div className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3"><button onClick={() => { navigator.clipboard.writeText(msg.content); showToast('�Ѹ���', 'info'); }} className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:bg-white">����</button><button onClick={() => downloadWordDocument(conversationTitle || '��ɽ��ʦ�ж�', msg.content)} className="rounded-lg border border-black/10 bg-[#fbf6ee] px-3 py-1.5 text-xs font-semibold text-[#7a4c2c] transition hover:bg-white">���� Word</button></div>}</div></div>; })}
-              {streamingContent && <div className="mb-4 flex justify-start"><div className="max-w-[88%] rounded rounded-bl-sm border border-black/10 bg-white px-3.5 py-2.5 text-[13px] leading-6 text-stone-800"><MessageText content={streamingContent} /><span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-[#8a5a35] align-middle" /></div></div>}
-              <div ref={bottomRef} />
-            </div>
-            <div className="border-t border-stone-200 bg-white p-2.5">
-              <input ref={fileInputRef} type="file" multiple accept=".pdf,.txt,.md,.doc,.docx" onChange={event => chooseFiles(event.target.files)} className="hidden" />
-              {pendingFiles.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{pendingFiles.map((file, index) => <div key={`${file.name}-${index}`} className="flex max-w-full items-center gap-2 rounded border border-stone-200 bg-[#fbfaf7] px-2.5 py-1.5 text-xs text-stone-700"><span className="max-w-48 truncate font-semibold">{file.name}</span><button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="�Ƴ�">x</button></div>)}</div>}
-              <div className="flex gap-2"><button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="grid h-10 w-10 shrink-0 place-items-center rounded border border-stone-300 bg-white text-lg text-stone-700 transition hover:border-[#8a5a35] hover:text-[#8a5a35] disabled:opacity-40" title="�ϴ�����">+</button><input ref={inputRef} type="text" value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => event.key === 'Enter' && sendText(input)} placeholder={sending ? '�ȴ� AI �ظ���...' : '����һ�仰������ֻ������'} className="min-w-0 flex-1 rounded border border-stone-300 bg-white px-3 py-2 text-[13px] text-stone-900 outline-none placeholder:text-stone-400 focus:border-[#8a5a35] focus:ring-1 focus:ring-[#8a5a35]/20" /><button onClick={() => sendText(workbenchCopy.prompt)} disabled={sending} className="shrink-0 rounded bg-[#2f251d] px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-[#4a3728] disabled:opacity-40">����</button><button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="grid h-10 w-10 shrink-0 place-items-center rounded bg-stone-900 text-white transition hover:bg-stone-800 disabled:opacity-40" title="���Ͳ���">��</button></div>
-            </div>
-          </section>
-        </main>
-      </div>
-    );
-  }
-
-  if (isAnranLaoshi) {
-    const yxcsWorkbench = workbench as unknown as AnranLaoshiWorkbenchValues;
-
-    return (
-      <div className="yxcs-theme flex h-screen flex-col overflow-hidden bg-[var(--bg)] text-stone-950">
-        <header className="shrink-0 border-b border-stone-200/70 bg-white/82 px-4 py-2.5 backdrop-blur-xl">
-          <div className="mx-auto flex max-w-[1440px] items-center gap-3">
-            <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded border border-stone-200 bg-white/85 text-lg text-stone-600 transition hover:bg-white" title="����">
-              ��
-            </button>
-            <button onClick={onOpenHome} className="rounded border border-stone-200 bg-white/85 px-4 py-2 text-sm font-semibold text-stone-700 transition hover:bg-white">
-              ��ҳ
-            </button>
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate text-base font-semibold text-stone-950">һ��С������ѯ����̨</h1>
-              <p className="truncate text-xs text-stone-500">���ѡ����ѯ����м������ı����Ҳಹ�������Ϣ��</p>
-            </div>
-            <button onClick={() => setTeacherLibraryOpen(prev => !prev)} className="rounded border border-stone-200 bg-white/85 px-4 py-2 text-xs font-semibold text-stone-600 transition hover:bg-white">
-              {teacherLibraryOpen ? '���������' : 'չ��������'}
-            </button>
-            <button onClick={onOpenCredits} className="rounded border border-stone-200 bg-white/85 px-4 py-2 text-xs font-semibold text-stone-600">
-              ����
-            </button>
-          </div>
-        </header>
-
-        <main className={`mx-auto grid min-h-0 w-full max-w-[1440px] flex-1 gap-3 p-3 transition-[grid-template-columns] duration-300 ${teacherLibraryOpen ? 'grid-cols-[292px_minmax(0,1fr)_292px]' : 'grid-cols-[292px_minmax(0,1fr)_52px]'}`}>
-          <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-stone-200/80 bg-white/86">
-            <div className="border-b border-stone-200/80 p-3">
-              <div className="flex items-center gap-2.5">
-                <div className="h-10 w-10 shrink-0 overflow-hidden rounded bg-[#f0e9dd]">
-                  <img src={meta.avatar} alt="һ��С����" className="h-full w-full object-cover" onError={event => { event.currentTarget.style.display = 'none'; }} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[15px] font-semibold text-stone-950">��ѯ����</p>
-                  <p className="mt-0.5 truncate text-xs leading-5 text-stone-500">{anranLaoshiCopy.title}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-              <AnranLaoshiTaskPicker
-                value={activeAnranLaoshiTask}
-                subOption={activeAnranLaoshiSubOption}
-                onChange={selectAnranLaoshiTask}
-                onSubOptionChange={setActiveAnranLaoshiSubOption}
-              />
-
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full rounded border border-black/10 bg-white px-3 py-3 text-left transition hover:border-black/10 hover:bg-white"
-              >
-                <span className="block text-[13px] font-semibold text-stone-950">�ϴ�����</span>
-                <span className="mt-1 block text-xs leading-5 text-stone-500">���ϴ������¼����ͨ�ı������˵���ļ���</span>
-              </button>
-
-              {pendingFiles.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-stone-500">�����Ͳ���</p>
-                  {pendingFiles.map((file, index) => (
-                    <div key={`${file.name}-${index}`} className="flex items-center gap-2 rounded border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-700">
-                      <span className="min-w-0 flex-1 truncate font-semibold">{file.name}</span>
-                      <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="�Ƴ�">x</button>
+                <div className="flex h-full min-h-[420px] items-center justify-center rounded-lg border border-dashed border-[#d8cdbb] bg-white/58 px-6 py-10">
+                  <div className="max-w-xl text-center">
+                    <p className="text-[13px] font-semibold text-stone-600">等待规划信息</p>
+                    <p className="mt-2 text-xs leading-6 text-stone-400">填写右侧条件后，知远老师会先做约束表，再给路径判断、风险清单和下一步。</p>
+                    <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                      {ZHIYUAN_QUESTIONS.map(question => <button key={question} type="button" onClick={() => sendText(question)} className="rounded border border-[#e3d8c7] bg-white px-3 py-2 text-left text-[11px] font-semibold leading-5 text-stone-600 transition hover:border-[#8a6b38] hover:text-[#2b2721]">{question}</button>)}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </aside>
-
-          <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-md border border-stone-200/80 bg-white">
-            <div className="border-b border-stone-200 bg-white p-4">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold text-[#8a5a35]">��ѯ���� / {anranLaoshiTask.label}</p>
-                  <h2 className="mt-1 text-lg font-semibold text-stone-950">{anranLaoshiCopy.title}</h2>
-                  <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-500">{anranLaoshiCopy.intro}</p>
-                </div>
-                <span className="shrink-0 rounded bg-[#f3eadc] px-2.5 py-1 text-[11px] font-semibold text-[#7a4c2c]">�ֶοɿ�</span>
-              </div>
-            </div>
-
-            <div className="min-h-0 overflow-y-auto bg-[#fbf8f2] p-3">
-              {creditBlocked && (
-                <div className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-                  <p className="font-semibold">���ֲ��㣬��ʱ���ܼ�������</p>
-                  <button type="button" onClick={onOpenCredits} className="mt-2 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600">ȥ��������</button>
-                </div>
-              )}
-              {messagesLoading && <div className="py-16 text-center text-sm text-stone-400">������...</div>}
-              {messagesError && <div className="rounded border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">��Ϣ����ʧ�ܣ��뷵�����ԡ�</div>}
-              {!messagesLoading && !messagesError && messages.length === 0 && !sending && (
-                <div className="flex h-full min-h-[420px] flex-col">
-                  <div className="flex flex-1 items-center justify-center rounded border border-dashed border-black/10 bg-white/55 px-6 py-10">
-                    <div className="max-w-md text-center">
-                      <p className="text-[13px] font-semibold text-stone-500">�ȴ���ѯ��Ϣ</p>
-                      <p className="mt-2 text-xs leading-6 text-stone-400">{anranLaoshiTask.tip}</p>
-                      <div className="mt-5 flex flex-wrap justify-center gap-2">
-                        {anranLaoshiTask.quickQuestions.map(question => (
-                          <button key={question} type="button" onClick={() => sendText(question)} className="rounded border border-black/10 bg-white/80 px-3 py-1.5 text-[11px] font-semibold text-stone-500 transition hover:border-black/10 hover:text-stone-700">
-                            {question}
-                          </button>
-                        ))}
-                      </div>
-                      <button onClick={() => sendText(anranLaoshiCopy.prompt)} disabled={sending} className="mt-4 rounded bg-[#2f251d] px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">
-                        {anranLaoshiCopy.button}
-                      </button>
-                    </div>
+                    <button onClick={() => sendText(workbenchCopy.prompt)} disabled={sending} className="mt-4 rounded bg-[#2b2721] px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">开始路径判断</button>
                   </div>
                 </div>
               )}
-
               {messages.map(msg => {
                 const isUser = msg.role === 'user';
                 return (
                   <div key={msg.id} className={`mb-4 flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[88%] rounded px-3.5 py-2.5 text-[13px] leading-6 ${isUser ? 'rounded-br-sm bg-[#2f251d] text-white' : 'rounded-bl-sm border border-black/10 bg-white text-stone-800'}`}>
+                    <div className={`max-w-[88%] rounded-lg px-3.5 py-2.5 text-[13px] leading-6 shadow-sm ${isUser ? 'rounded-br-sm bg-[#2b2721] text-white' : 'rounded-bl-sm border border-[#e1d6c5] bg-white text-stone-800'}`}>
                       <MessageText content={msg.content} dark={isUser} />
                       <AttachmentList attachments={msg.attachments} dark={isUser} />
-                      {!isUser && (
-                        <div className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3">
-                          <button onClick={() => { navigator.clipboard.writeText(msg.content); showToast('�Ѹ���', 'info'); }} className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:bg-white">
-                            ����
-                          </button>
-                          <button onClick={() => downloadWordDocument(conversationTitle || anranLaoshiCopy.title || 'AI �ش�', msg.content)} className="rounded-lg border border-black/10 bg-[#fbf6ee] px-3 py-1.5 text-xs font-semibold text-[#7a4c2c] transition hover:bg-white">
-                            ���� Word
-                          </button>
-                        </div>
-                      )}
+                      {!isUser && <div className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3"><button onClick={() => copyAssistantMessage(msg.content)} className="rounded-md border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:bg-white">复制</button><button onClick={() => downloadWordDocument(conversationTitle || '规划判断', msg.content)} className="rounded-md border border-[#ead8b7] bg-[#fff7e6] px-3 py-1.5 text-xs font-semibold text-[#7d5b25] transition hover:bg-white">下载 Word</button></div>}
                     </div>
                   </div>
                 );
               })}
-
-              {streamingContent && (
-                <div className="mb-4 flex justify-start">
-                  <div className="max-w-[88%] rounded rounded-bl-sm border border-black/10 bg-white px-3.5 py-2.5 text-[13px] leading-6 text-stone-800">
-                    <MessageText content={streamingContent} />
-                    <span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-[#8a5a35] align-middle" />
-                  </div>
-                </div>
-              )}
+              {streamingContent && <div className="mb-4 flex justify-start"><div className="max-w-[88%] rounded-lg rounded-bl-sm border border-[#e1d6c5] bg-white px-3.5 py-2.5 text-[13px] leading-6 text-stone-800 shadow-sm"><MessageText content={streamingContent} /><span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-[#8a6b38] align-middle" /></div></div>}
               <div ref={bottomRef} />
             </div>
-
-            <div className="border-t border-stone-200 bg-white p-2.5">
+            <div className="border-t border-[#e4dacb] bg-white p-2.5">
               <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.txt,.md,.doc,.docx" onChange={event => chooseFiles(event.target.files)} className="hidden" />
+              {pendingFiles.length > 0 && <div className="mb-2 flex flex-wrap gap-2">{pendingFiles.map((file, index) => <div key={`${file.name}-${index}`} className="flex max-w-full items-center gap-2 rounded-md border border-[#e1d6c5] bg-[#faf7ef] px-2.5 py-1.5 text-xs text-stone-700"><span className="max-w-48 truncate font-semibold">{file.name}</span><button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="移除">x</button></div>)}</div>}
               <div className="flex gap-2">
-                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="grid h-10 w-10 shrink-0 place-items-center rounded border border-stone-300 bg-white text-lg text-stone-700 transition hover:border-[#8a5a35] hover:text-[#8a5a35] disabled:opacity-40" title="�ϴ�����">
-                  +
-                </button>
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={input}
-                  onChange={event => setInput(event.target.value)}
-                  onKeyDown={event => event.key === 'Enter' && sendText(input)}
-                  placeholder={sending ? '�ȴ� AI �ظ���...' : '������ϻ�Ҫ��Ҳ����ֻ���͸���'}
-                  className="min-w-0 flex-1 rounded border border-stone-300 bg-white px-3 py-2 text-[13px] text-stone-900 outline-none placeholder:text-stone-400 focus:border-[#8a5a35] focus:ring-1 focus:ring-[#8a5a35]/20"
-                />
-                <button onClick={() => sendText(anranLaoshiCopy.prompt)} disabled={sending} className="shrink-0 rounded bg-[#2f251d] px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-[#4a3728] disabled:opacity-40">
-                  {anranLaoshiCopy.button}
-                </button>
-                <button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="grid h-10 w-10 shrink-0 place-items-center rounded bg-stone-900 text-white transition hover:bg-stone-800 disabled:opacity-40" title="���Ͳ���">
-                  ��
-                </button>
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-[#d8cdbb] bg-white text-lg text-stone-700 shadow-sm transition hover:border-[#8a6b38] hover:text-[#7d5b25] disabled:opacity-40" title="上传附件">+</button>
+                <input ref={inputRef} type="text" value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => event.key === 'Enter' && sendText(input)} placeholder={sending ? '正在判断...' : '补充分数、预算、城市、专业或目标'} className="min-w-0 flex-1 rounded-md border border-[#d8cdbb] bg-white px-3 py-2 text-[13px] text-stone-900 outline-none placeholder:text-stone-400 focus:border-[#8a6b38] focus:ring-1 focus:ring-[#8a6b38]/20" />
+                <button onClick={() => sendText(workbenchCopy.prompt)} disabled={sending} className="shrink-0 rounded-md bg-[#2b2721] px-4 py-2 text-[13px] font-semibold text-white shadow transition hover:bg-[#44392d] disabled:opacity-40">开始判断</button>
+                <button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-stone-900 text-white shadow transition hover:bg-stone-800 disabled:opacity-40" title="发送补充">→</button>
               </div>
             </div>
           </section>
 
-          <aside className={`min-h-0 overflow-hidden rounded-md border border-stone-200/80 bg-white/86 transition-all ${teacherLibraryOpen ? 'opacity-100' : 'opacity-100'}`}>
-            {teacherLibraryOpen ? (
-              <div className="flex h-full min-h-0 flex-col">
-                <div className="flex items-center justify-between border-b border-stone-200/80 p-3">
-                  <div>
-                    <p className="text-[13px] font-semibold text-stone-950">������Ϣ</p>
-                    <p className="text-xs text-stone-500">����ǰ������Ҫ��Ϣ</p>
-                  </div>
-                  <button type="button" onClick={() => setTeacherLibraryOpen(false)} className="rounded border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-600">����</button>
-                </div>
-                <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-3">
-                  {anranLaoshiCopy.fields.map(field => (
-                    <label key={field.key} className="block rounded border border-black/10 bg-white p-3">
-                      <span className="mb-2 block text-xs font-semibold text-stone-700">{field.label}</span>
-                      {field.options ? (
-                        <select
-                          value={yxcsWorkbench[field.key]}
-                          onChange={event => updateAnranLaoshiWorkbenchValue(field.key, event.target.value)}
-                          className="h-9 w-full rounded border border-black/10 bg-white px-3 text-xs text-stone-800 outline-none focus:border-[#8a5a35]"
-                        >
-                          <option value="">{field.placeholder}</option>
-                          {field.options.map(option => <option key={option} value={option}>{option}</option>)}
-                        </select>
-                      ) : (
-                        <textarea
-                          value={yxcsWorkbench[field.key]}
-                          onChange={event => updateAnranLaoshiWorkbenchValue(field.key, event.target.value)}
-                          placeholder={field.placeholder}
-                          rows={field.rows || 3}
-                          className="w-full resize-none rounded border border-black/10 bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]"
-                        />
-                      )}
-                    </label>
-                  ))}
-                  <div className="rounded border border-black/10 bg-white p-3">
-                    <p className="text-xs font-semibold text-[#8a5a35]">���β���</p>
-                    <p className="mt-2 text-xs leading-5 text-stone-600">{pendingFiles.length > 0 ? '���д����Ͳ��ϣ����ͺ���Ϊ���δ������ݡ�' : '����ֱ����д���֣�Ҳ�����ϴ��ɶ�ȡ�ļ���'}</p>
-                  </div>
-                </div>
+          <aside className="min-h-0 overflow-hidden rounded-lg border border-[#d8cdbb] bg-[#fffaf0]/88 shadow-[0_14px_34px_rgba(64,48,28,0.06)]">
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="border-b border-[#e4dacb] p-3"><p className="text-[13px] font-semibold text-[#211f1b]">约束信息</p><p className="text-xs text-stone-500">分数、预算、城市、专业和底线</p></div>
+              <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-3">
+                {workbenchCopy.fields.filter(field => field.key !== 'materialType').map(field => (
+                  <label key={field.key} className="block rounded-lg border border-[#e3d8c7] bg-white p-3">
+                    <span className="mb-2 block text-xs font-semibold text-stone-700">{field.label}</span>
+                    {field.options ? (
+                      <select value={workbench[field.key]} onChange={event => updateWorkbenchValue(field.key, event.target.value)} className="h-9 w-full rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-2 text-xs text-stone-800 outline-none focus:border-[#8a6b38]">
+                        <option value="">{field.placeholder}</option>
+                        {field.options.map(option => <option key={option} value={option}>{option}</option>)}
+                      </select>
+                    ) : field.rows === 1 ? (
+                      <input value={workbench[field.key]} onChange={event => updateWorkbenchValue(field.key, event.target.value)} placeholder={field.placeholder} className="h-9 w-full rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a6b38]" />
+                    ) : (
+                      <textarea value={workbench[field.key]} onChange={event => updateWorkbenchValue(field.key, event.target.value)} placeholder={field.placeholder} rows={field.rows || 3} className="w-full resize-none rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a6b38]" />
+                    )}
+                  </label>
+                ))}
               </div>
-            ) : (
-              <button type="button" onClick={() => setTeacherLibraryOpen(true)} className="flex h-full w-full items-center justify-center bg-white text-xs font-semibold text-stone-600 [writing-mode:vertical-rl]">
-                չ��������
-              </button>
-            )}
+            </div>
           </aside>
         </main>
       </div>
@@ -1833,49 +2045,49 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
   if (isPreconsult) {
     return (
       <div className="flex h-screen flex-col overflow-hidden bg-[#f5f1e8] text-[#211f1b]">
-        <header className="shrink-0 border-b border-black/10 bg-white/88 px-4 py-2.5 backdrop-blur-xl">
+        <header className="shrink-0 border-b border-[#ded4c4] bg-[#fffaf0]/88 px-4 py-2.5 shadow-[0_1px_18px_rgba(64,48,28,0.06)] backdrop-blur-xl">
           <div className="mx-auto flex max-w-[1440px] items-center gap-3">
-            <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded-lg border border-black/10 bg-white/85 text-lg text-stone-600 transition hover:bg-white" title="����">��</button>
-            <button onClick={onOpenHome} className="rounded-lg border border-black/10 bg-white/85 px-3.5 py-2 text-xs font-semibold text-stone-700 transition hover:bg-white">��ҳ</button>
-            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-black/10 bg-[#efe6d6]"><img src={meta.avatar} alt={meta.alias} className="h-full w-full object-cover" onError={event => { event.currentTarget.style.display = 'none'; }} /></div>
-            <div className="min-w-0 flex-1"><h1 className="truncate text-base font-semibold text-[#211f1b]">������ʷ���Ԥ��ѯ����̨</h1><p className="truncate text-xs text-stone-500">������ʵ��֤�ݡ������չ�Ϳ��ύ���ϡ�</p></div>
-            <button onClick={() => setPreconsultLibraryOpen(prev => !prev)} className="rounded-lg border border-black/10 bg-white/85 px-3.5 py-2 text-xs font-semibold text-stone-600 transition hover:bg-white">{preconsultLibraryOpen ? '������Ͽ�' : 'չ�����Ͽ�'}</button>
-            <button onClick={onOpenCredits} className="rounded-lg border border-black/10 bg-white/85 px-3.5 py-2 text-xs font-semibold text-stone-600">����</button>
+            <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded-lg border border-[#d8cdbb] bg-white/85 text-lg text-stone-600 shadow-sm transition hover:bg-white" title="返回">←</button>
+            <button onClick={onOpenHome} className="rounded-lg border border-[#d8cdbb] bg-white/85 px-3.5 py-2 text-xs font-semibold text-stone-700 shadow-sm transition hover:bg-white">首页</button>
+            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-[#d8cdbb] bg-[#efe6d6]"><img src={meta.avatar} alt={meta.alias} className="h-full w-full object-cover" onError={event => { event.currentTarget.style.display = 'none'; }} /></div>
+            <div className="min-w-0 flex-1"><h1 className="truncate text-base font-semibold text-[#211f1b]">明衡顾问明衡顾问法律预咨询工作台</h1><p className="truncate text-xs text-stone-500">整理事实、证据、程序进展和可提交材料。</p></div>
+            <button onClick={() => setPreconsultLibraryOpen(prev => !prev)} className="rounded-lg border border-[#d8cdbb] bg-white/85 px-3.5 py-2 text-xs font-semibold text-stone-600 shadow-sm transition hover:bg-white">{preconsultLibraryOpen ? '收起材料库' : '展开材料库'}</button>
+            <button onClick={onOpenCredits} className="rounded-lg border border-[#d8cdbb] bg-white/85 px-3.5 py-2 text-xs font-semibold text-stone-600 shadow-sm">积分</button>
           </div>
         </header>
         <main className={`mx-auto grid min-h-0 w-full max-w-[1440px] flex-1 gap-3 p-3 transition-[grid-template-columns] duration-300 ${preconsultLibraryOpen ? 'grid-cols-[304px_minmax(0,1fr)_316px]' : 'grid-cols-[304px_minmax(0,1fr)_52px]'}`}>
-          <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-black/10 bg-white/88">
-            <div className="border-b border-black/8 p-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a6b38]">������ѯ</p><h2 className="mt-1 text-[15px] font-semibold text-[#211f1b]">��ѯ����</h2><p className="mt-1 text-xs leading-5 text-stone-500">{preconsultTask.headline}</p></div>
+          <aside className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-[#d8cdbb] bg-[#fffaf0]/88 shadow-[0_14px_34px_rgba(64,48,28,0.06)]">
+            <div className="border-b border-[#e4dacb] p-3"><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a6b38]">热门咨询</p><h2 className="mt-1 text-[15px] font-semibold text-[#211f1b]">咨询事项</h2><p className="mt-1 text-xs leading-5 text-stone-500">{preconsultTask.headline}</p></div>
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
               {MINGHENG_FAWU_TASKS.map(task => {
                 const active = task.id === activePreconsultTask;
                 return (
-                  <button key={task.id} type="button" onClick={() => { setActivePreconsultTask(task.id); updateWorkbenchValue('output', task.resultHint); }} className={`w-full rounded-lg border px-3 py-2.5 text-left transition ${active ? 'border-[#2b2721] bg-[#2f251d] text-white' : 'border-black/10 bg-white text-stone-800 hover:border-[#2f251d]/40 hover:bg-white'}`}>
+                  <button key={task.id} type="button" onClick={() => { setActivePreconsultTask(task.id); updateWorkbenchValue('output', task.resultHint); }} className={`w-full rounded-lg border px-3 py-2.5 text-left transition ${active ? 'border-[#2b2721] bg-[#2b2721] text-white shadow-sm' : 'border-[#e3d8c7] bg-white text-stone-800 hover:border-[#cdbda6] hover:bg-[#fffdf8]'}`}>
                     <span className="block text-[13px] font-semibold leading-5">{task.label}</span>
                     <span className={`mt-0.5 block whitespace-normal break-words text-[11px] leading-4 ${active ? 'text-white/68' : 'text-stone-500'}`}>{task.headline}</span>
                     {active && <span className="mt-2 block text-[11px] leading-5 text-white/72">{task.description}</span>}
                   </button>
                 );
               })}
-              <div className="rounded-lg border border-black/10 bg-white p-3"><p className="text-xs font-semibold text-[#7a4c2c]">��������</p><div className="mt-2 grid gap-1.5">{preconsultTask.quickQuestions.map(question => (<button key={question} type="button" onClick={() => sendText(question)} className="rounded-md bg-[#f6f0e6] px-2.5 py-2 text-left text-[11px] leading-4 text-stone-600 transition hover:bg-[#efe3d0] hover:text-stone-900">{question}</button>))}</div></div>
-              <div className="rounded-lg border border-black/10 bg-[#f3eadc] p-3 text-xs leading-5 text-[#7a4c2c]"><p className="font-semibold text-[#5f4218]">Ԥ����������</p><p className="mt-1">{preconsultTask.resultHint}</p></div>
+              <div className="rounded-lg border border-[#e3d8c7] bg-white p-3"><p className="text-xs font-semibold text-[#7d5b25]">常见提问</p><div className="mt-2 grid gap-1.5">{preconsultTask.quickQuestions.map(question => (<button key={question} type="button" onClick={() => sendText(question)} className="rounded-md bg-[#f6f0e6] px-2.5 py-2 text-left text-[11px] leading-4 text-stone-600 transition hover:bg-[#efe3d0] hover:text-stone-900">{question}</button>))}</div></div>
+              <div className="rounded-lg border border-[#ead8b7] bg-[#fff7e6] p-3 text-xs leading-5 text-[#7d5b25]"><p className="font-semibold text-[#5f4218]">预计整理内容</p><p className="mt-1">{preconsultTask.resultHint}</p></div>
             </div>
           </aside>
-          <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-black/10 bg-white">
-            <div className="border-b border-black/8 bg-white p-4"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="text-[11px] font-semibold text-[#8a6b38]">����Ԥ��ѯ / {preconsultTask.label}</p><h2 className="mt-1 text-lg font-semibold text-[#211f1b]">{preconsultTask.headline}</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-stone-500">{preconsultTask.description}</p></div><div className="flex shrink-0 gap-1.5 text-[11px] font-semibold"><span className="rounded-md bg-[#f5e2df] px-2.5 py-1 text-[#8d2f24]">�߷���</span><span className="rounded-md bg-[#fff1ce] px-2.5 py-1 text-[#8a5f12]">���ʵ</span><span className="rounded-md bg-[#ece7de] px-2.5 py-1 text-stone-600">�����</span></div></div></div>
-            <div className="min-h-0 overflow-y-auto bg-[var(--bg)] p-3">
-              {creditBlocked && (<div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"><p className="font-semibold">���ֲ��㣬��ʱ���ܼ�������</p><button type="button" onClick={onOpenCredits} className="mt-2 rounded-md bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600">ȥ��������</button></div>)}
-              {messagesLoading && <div className="py-16 text-center text-sm text-stone-400">������...</div>}
-              {messagesError && <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">��Ϣ����ʧ�ܣ��뷵�����ԡ�</div>}
-              {!messagesLoading && !messagesError && messages.length === 0 && !sending && (<div className="flex h-full min-h-[420px] items-center justify-center rounded-lg border border-dashed border-black/10 bg-white/58 px-6 py-10"><div className="max-w-md text-center"><p className="text-[13px] font-semibold text-stone-500">�ȴ���ѯ��Ϣ</p><p className="mt-2 text-xs leading-6 text-stone-400">����д�Ҳ������Ϣ����Ϣ����ʱ�����׷�ʣ���Ϣ�㹻ʱ��ֱ��������ʵ��֤�ݡ����ձ߽�ʹ���·����</p><button onClick={() => sendText(`��Χ��${preconsultTask.label}��������һ�η���Ԥ��ѯ��`)} disabled={sending} className="mt-5 rounded-md bg-[#2f251d] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#4a3728] disabled:opacity-40">������ѯ����</button></div></div>)}
-              {messages.map(msg => { const isUser = msg.role === 'user'; return (<div key={msg.id} className={`mb-4 flex ${isUser ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[88%] rounded-lg px-3.5 py-2.5 text-[13px] leading-6 ${isUser ? 'rounded-br-sm bg-[#2f251d] text-white' : 'rounded-bl-sm border border-black/10 bg-white text-stone-800'}`}><MessageText content={msg.content} dark={isUser} /><AttachmentList attachments={msg.attachments} dark={isUser} />{!isUser && (<div className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3"><button onClick={() => { navigator.clipboard.writeText(msg.content); showToast('�Ѹ���', 'info'); }} className="rounded-md border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:bg-white">����</button><button onClick={() => downloadWordDocument(conversationTitle || `${preconsultTask.label}Ԥ��ѯ����`, msg.content)} className="rounded-md border border-black/10 bg-[#f3eadc] px-3 py-1.5 text-xs font-semibold text-[#7a4c2c] transition hover:bg-white">���� Word</button></div>)}</div></div>); })}
-              {streamingContent && (<div className="mb-4 flex justify-start"><div className="max-w-[88%] rounded-lg rounded-bl-sm border border-black/10 bg-white px-3.5 py-2.5 text-[13px] leading-6 text-stone-800"><MessageText content={streamingContent} /><span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-[#8a5a35] align-middle" /></div></div>)}
+          <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-lg border border-[#d8cdbb] bg-white shadow-[0_14px_34px_rgba(64,48,28,0.06)]">
+            <div className="border-b border-[#e4dacb] bg-white p-4"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="text-[11px] font-semibold text-[#8a6b38]">法律预咨询 / {preconsultTask.label}</p><h2 className="mt-1 text-lg font-semibold text-[#211f1b]">{preconsultTask.headline}</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-stone-500">{preconsultTask.description}</p></div><div className="flex shrink-0 gap-1.5 text-[11px] font-semibold"><span className="rounded-md bg-[#f5e2df] px-2.5 py-1 text-[#8d2f24]">高风险</span><span className="rounded-md bg-[#fff1ce] px-2.5 py-1 text-[#8a5f12]">需核实</span><span className="rounded-md bg-[#ece7de] px-2.5 py-1 text-stone-600">需留痕</span></div></div></div>
+            <div className="min-h-0 overflow-y-auto bg-[#faf7ef] p-3">
+              {creditBlocked && (<div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"><p className="font-semibold">积分不足，暂时不能继续提问</p><button type="button" onClick={onOpenCredits} className="mt-2 rounded-md bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600">去积分中心</button></div>)}
+              {messagesLoading && <div className="py-16 text-center text-sm text-stone-400">加载中...</div>}
+              {messagesError && <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">消息加载失败，请返回重试。</div>}
+              {!messagesLoading && !messagesError && messages.length === 0 && !sending && (<div className="flex h-full min-h-[420px] items-center justify-center rounded-lg border border-dashed border-[#d8cdbb] bg-white/58 px-6 py-10"><div className="max-w-md text-center"><p className="text-[13px] font-semibold text-stone-500">等待咨询信息</p><p className="mt-2 text-xs leading-6 text-stone-400">先填写右侧基础信息；信息不足时会继续追问，信息足够时会直接整理事实、证据、风险边界和处理路径。</p><button onClick={() => sendText(`请围绕${preconsultTask.label}事项整理一次法律预咨询。`)} disabled={sending} className="mt-5 rounded-md bg-[#2b2721] px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-[#44392d] disabled:opacity-40">整理咨询材料</button></div></div>)}
+              {messages.map(msg => { const isUser = msg.role === 'user'; return (<div key={msg.id} className={`mb-4 flex ${isUser ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[88%] rounded-lg px-3.5 py-2.5 text-[13px] leading-6 shadow-sm ${isUser ? 'rounded-br-sm bg-[#2b2721] text-white' : 'rounded-bl-sm border border-[#e1d6c5] bg-white text-stone-800'}`}><MessageText content={msg.content} dark={isUser} /><AttachmentList attachments={msg.attachments} dark={isUser} />{!isUser && (<div className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3"><button onClick={() => { navigator.clipboard.writeText(msg.content); showToast('已复制', 'info'); }} className="rounded-md border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:bg-white">复制</button><button onClick={() => downloadWordDocument(conversationTitle || `${preconsultTask.label}预咨询材料`, msg.content)} className="rounded-md border border-[#ead8b7] bg-[#fff7e6] px-3 py-1.5 text-xs font-semibold text-[#7d5b25] transition hover:bg-white">下载 Word</button></div>)}</div></div>); })}
+              {streamingContent && (<div className="mb-4 flex justify-start"><div className="max-w-[88%] rounded-lg rounded-bl-sm border border-[#e1d6c5] bg-white px-3.5 py-2.5 text-[13px] leading-6 text-stone-800 shadow-sm"><MessageText content={streamingContent} /><span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-[#8a6b38] align-middle" /></div></div>)}
               <div ref={bottomRef} />
             </div>
-            <div className="border-t border-black/8 bg-white p-2.5"><input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.txt,.md,.doc,.docx" onChange={event => chooseFiles(event.target.files)} className="hidden" />{pendingFiles.length > 0 && (<div className="mb-2 flex flex-wrap gap-2">{pendingFiles.map((file, index) => (<div key={`${file.name}-${index}`} className="flex max-w-full items-center gap-2 rounded-md border border-black/10 bg-[var(--bg)] px-2.5 py-1.5 text-xs text-stone-700"><span className="max-w-48 truncate font-semibold">{file.name}</span><button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="�Ƴ�">x</button></div>))}</div>)}<div className="flex gap-2"><button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-black/10 bg-white text-lg text-stone-700 transition hover:border-[#8a5a35] hover:text-[#8a5a35] disabled:opacity-40" title="�ϴ�����">+</button><input ref={inputRef} type="text" value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => event.key === 'Enter' && sendText(input)} placeholder={sending ? '��������...' : '������ʵ��֤�ݻ�ǰ����'} className="min-w-0 flex-1 rounded-md border border-black/10 bg-white px-3 py-2 text-[13px] text-stone-900 outline-none placeholder:text-stone-400 focus:border-[#8a5a35] focus:ring-1 focus:ring-[#8a5a35]/20" /><button onClick={() => sendText(`��Χ��${preconsultTask.label}��������һ�η���Ԥ��ѯ��`)} disabled={sending} className="shrink-0 rounded-md bg-[#2f251d] px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-[#4a3728] disabled:opacity-40">�������</button><button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-stone-900 text-white transition hover:bg-stone-800 disabled:opacity-40" title="���Ͳ���">��</button></div></div>
+            <div className="border-t border-[#e4dacb] bg-white p-2.5"><input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.txt,.md,.doc,.docx" onChange={event => chooseFiles(event.target.files)} className="hidden" />{pendingFiles.length > 0 && (<div className="mb-2 flex flex-wrap gap-2">{pendingFiles.map((file, index) => (<div key={`${file.name}-${index}`} className="flex max-w-full items-center gap-2 rounded-md border border-[#e1d6c5] bg-[#faf7ef] px-2.5 py-1.5 text-xs text-stone-700"><span className="max-w-48 truncate font-semibold">{file.name}</span><button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="移除">x</button></div>))}</div>)}<div className="flex gap-2"><button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-[#d8cdbb] bg-white text-lg text-stone-700 shadow-sm transition hover:border-[#8a6b38] hover:text-[#7d5b25] disabled:opacity-40" title="上传附件">+</button><input ref={inputRef} type="text" value={input} onChange={event => setInput(event.target.value)} onKeyDown={event => event.key === 'Enter' && sendText(input)} placeholder={sending ? '正在整理...' : '补充事实、证据或当前诉求'} className="min-w-0 flex-1 rounded-md border border-[#d8cdbb] bg-white px-3 py-2 text-[13px] text-stone-900 outline-none placeholder:text-stone-400 focus:border-[#8a6b38] focus:ring-1 focus:ring-[#8a6b38]/20" /><button onClick={() => sendText(`请围绕${preconsultTask.label}事项整理一次法律预咨询。`)} disabled={sending} className="shrink-0 rounded-md bg-[#2b2721] px-4 py-2 text-[13px] font-semibold text-white shadow transition hover:bg-[#44392d] disabled:opacity-40">整理材料</button><button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-stone-900 text-white shadow transition hover:bg-stone-800 disabled:opacity-40" title="发送补充">→</button></div></div>
           </section>
-          <aside className="min-h-0 overflow-hidden rounded-lg border border-black/10 bg-white/88">
-            {preconsultLibraryOpen ? (<div className="flex h-full min-h-0 flex-col"><div className="flex items-center justify-between border-b border-black/8 p-3"><div><p className="text-[13px] font-semibold text-[#211f1b]">��ѯ��Ϣ</p><p className="text-xs text-stone-500">��ݡ���չ����ʵ��֤��</p></div><button type="button" onClick={() => setPreconsultLibraryOpen(false)} className="rounded-md border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-600">����</button></div><div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-3"><button type="button" onClick={() => fileInputRef.current?.click()} className="w-full rounded-lg border border-dashed border-[#cdbda6] bg-white px-3 py-3 text-left transition hover:bg-white"><span className="block text-[13px] font-semibold text-[#211f1b]">��Ӳ��ϸ���</span><span className="mt-1 block text-xs leading-5 text-stone-500">��ͼ����ͬ�����졢������¼����PDF��Word �������ȷŽ�����</span></button><label className="block rounded-lg border border-black/10 bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">��ѯ�����</span><input value={workbench.clientName} onChange={event => updateWorkbenchValue('clientName', event.target.value)} placeholder="���磺Ա���������ߡ������򷽡����桢������̳��ˡ�" className="h-9 w-full rounded-md border border-black/10 bg-white px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" /></label><label className="block rounded-lg border border-black/10 bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">�Է����/��ϵ</span><input value={workbench.clientBackground} onChange={event => updateWorkbenchValue('clientBackground', event.target.value)} placeholder="���磺��˾���̼ҡ������������ƽ̨���������������ء�" className="h-9 w-full rounded-md border border-black/10 bg-white px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" /></label><div className="grid grid-cols-2 gap-2"><label className="block rounded-lg border border-black/10 bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">����/��Ͻ</span><input value={workbench.region} onChange={event => updateWorkbenchValue('region', event.target.value)} placeholder="���л����" className="h-9 w-full rounded-md border border-black/10 bg-white px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" /></label><label className="block rounded-lg border border-black/10 bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">�¼���չ</span><select value={workbench.materialType} onChange={event => updateWorkbenchValue('materialType', event.target.value)} className="h-9 w-full rounded-md border border-black/10 bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#8a5a35]"><option value="">��ѡ��</option>{['�շ���', 'Э����', '�յ���в/�߸�', '׼������', '������', '���յ����߲���', '׼������', '�ѱ���/������', '׼����ȫ', '�ѵ���/�ٲ���'].map(item => <option key={item} value={item}>{item}</option>)}</select></label></div><label className="block rounded-lg border border-black/10 bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">��ʵ����/ʱ����</span><textarea value={workbench.background} onChange={event => updateWorkbenchValue('background', event.target.value)} placeholder={preconsultTask.materialPlaceholder} rows={4} className="w-full resize-none rounded-md border border-black/10 bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" /></label><label className="block rounded-lg border border-black/10 bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">{preconsultTask.materialLabel}</span><textarea value={workbench.material} onChange={event => updateWorkbenchValue('material', event.target.value)} placeholder="������֤������д������֤�����ơ���˭�����֤��ʲô���Ƿ��ѽ�ͼ�򵼳���" rows={5} className="w-full resize-none rounded-md border border-black/10 bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" /></label><label className="block rounded-lg border border-black/10 bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">{preconsultTask.actionLabel}</span><textarea value={workbench.goal} onChange={event => updateWorkbenchValue('goal', event.target.value)} placeholder={preconsultTask.actionPlaceholder} rows={3} className="w-full resize-none rounded-md border border-black/10 bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" /></label><label className="block rounded-lg border border-black/10 bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">ϣ���õ��Ĳ���</span><input value={workbench.output} onChange={event => updateWorkbenchValue('output', event.target.value)} placeholder={preconsultTask.resultHint} className="h-9 w-full rounded-md border border-black/10 bg-white px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" /></label></div></div>) : (<button type="button" onClick={() => setPreconsultLibraryOpen(true)} className="flex h-full w-full items-center justify-center bg-white text-xs font-semibold text-stone-600 [writing-mode:vertical-rl]">չ����ѯ��Ϣ</button>)}
+          <aside className="min-h-0 overflow-hidden rounded-lg border border-[#d8cdbb] bg-[#fffaf0]/88 shadow-[0_14px_34px_rgba(64,48,28,0.06)]">
+            {preconsultLibraryOpen ? (<div className="flex h-full min-h-0 flex-col"><div className="flex items-center justify-between border-b border-[#e4dacb] p-3"><div><p className="text-[13px] font-semibold text-[#211f1b]">咨询信息</p><p className="text-xs text-stone-500">身份、进展、事实、证据</p></div><button type="button" onClick={() => setPreconsultLibraryOpen(false)} className="rounded-md border border-[#d8cdbb] bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-600">收起</button></div><div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-3"><button type="button" onClick={() => fileInputRef.current?.click()} className="w-full rounded-lg border border-dashed border-[#cdbda6] bg-white px-3 py-3 text-left transition hover:bg-[#fffdf8]"><span className="block text-[13px] font-semibold text-[#211f1b]">添加材料附件</span><span className="mt-1 block text-xs leading-5 text-stone-500">截图、合同、聊天、工单、录屏、PDF、Word 都可以先放进来。</span></button><label className="block rounded-lg border border-[#e3d8c7] bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">咨询者身份</span><input value={workbench.clientName} onChange={event => updateWorkbenchValue('clientName', event.target.value)} placeholder="例如：员工、消费者、房屋买方、被告、家属、继承人。" className="h-9 w-full rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a6b38]" /></label><label className="block rounded-lg border border-[#e3d8c7] bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">对方身份/关系</span><input value={workbench.clientBackground} onChange={event => updateWorkbenchValue('clientBackground', event.target.value)} placeholder="例如：公司、商家、房东、亲属、平台、交警、公安机关。" className="h-9 w-full rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a6b38]" /></label><div className="grid grid-cols-2 gap-2"><label className="block rounded-lg border border-[#e3d8c7] bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">地区/管辖</span><input value={workbench.region} onChange={event => updateWorkbenchValue('region', event.target.value)} placeholder="城市或地区" className="h-9 w-full rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a6b38]" /></label><label className="block rounded-lg border border-[#e3d8c7] bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">事件进展</span><select value={workbench.materialType} onChange={event => updateWorkbenchValue('materialType', event.target.value)} className="h-9 w-full rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-2 text-xs text-stone-800 outline-none focus:border-[#8a6b38]"><option value="">请选择</option>{['刚发生', '协商中', '收到威胁/催告', '准备起诉', '已起诉', '已收到起诉材料', '准备报案', '已报案/被传唤', '准备保全', '已调解/仲裁中'].map(item => <option key={item} value={item}>{item}</option>)}</select></label></div><label className="block rounded-lg border border-[#e3d8c7] bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">事实经过/时间线</span><textarea value={workbench.background} onChange={event => updateWorkbenchValue('background', event.target.value)} placeholder={preconsultTask.materialPlaceholder} rows={4} className="w-full resize-none rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a6b38]" /></label><label className="block rounded-lg border border-[#e3d8c7] bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">{preconsultTask.materialLabel}</span><textarea value={workbench.material} onChange={event => updateWorkbenchValue('material', event.target.value)} placeholder="把已有证据逐条写下来：证据名称、在谁手里、能证明什么、是否已截图或导出。" rows={5} className="w-full resize-none rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a6b38]" /></label><label className="block rounded-lg border border-[#e3d8c7] bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">{preconsultTask.actionLabel}</span><textarea value={workbench.goal} onChange={event => updateWorkbenchValue('goal', event.target.value)} placeholder={preconsultTask.actionPlaceholder} rows={3} className="w-full resize-none rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a6b38]" /></label><label className="block rounded-lg border border-[#e3d8c7] bg-white p-3"><span className="mb-2 block text-xs font-semibold text-stone-700">希望拿到的材料</span><input value={workbench.output} onChange={event => updateWorkbenchValue('output', event.target.value)} placeholder={preconsultTask.resultHint} className="h-9 w-full rounded-md border border-[#e3d8c7] bg-[#fffdf8] px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a6b38]" /></label></div></div>) : (<button type="button" onClick={() => setPreconsultLibraryOpen(true)} className="flex h-full w-full items-center justify-center bg-[#fffaf0] text-xs font-semibold text-stone-600 [writing-mode:vertical-rl]">展开咨询信息</button>)}
           </aside>
         </main>
       </div>
@@ -1883,96 +2095,96 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
   }
 
   if (isYunqiaoJiaoxue) {
-    const deliveryWorkflows = YUNQIAO_TEACHING_WORKFLOWS_BY_BOARD.reading.map(id => YUNQIAO_TEACHING_WORKFLOWS[id]);
-    const evidenceWorkflows = [...YUNQIAO_TEACHING_WORKFLOWS_BY_BOARD['lesson-type'], ...YUNQIAO_TEACHING_WORKFLOWS_BY_BOARD.diagnosis].map(id => YUNQIAO_TEACHING_WORKFLOWS[id]);
+    const deliveryWorkflows = RONGSHENG_WORKFLOWS_BY_BOARD.reading.map(id => RONGSHENG_WORKFLOWS[id]);
+    const evidenceWorkflows = [...RONGSHENG_WORKFLOWS_BY_BOARD['lesson-type'], ...RONGSHENG_WORKFLOWS_BY_BOARD.diagnosis].map(id => RONGSHENG_WORKFLOWS[id]);
 
     return (
-      <div className="flex h-screen flex-col overflow-hidden bg-[var(--bg)] text-stone-950">
-        <header className="shrink-0 border-b border-stone-200/70 bg-white/86 px-4 py-2.5 backdrop-blur-xl">
+      <div className="flex h-screen flex-col overflow-hidden bg-[#f7f4ee] text-stone-950">
+        <header className="shrink-0 border-b border-stone-200/70 bg-[#fffaf2]/86 px-4 py-2.5 shadow-[0_1px_20px_rgba(80,64,42,0.05)] backdrop-blur-xl">
           <div className="mx-auto flex max-w-[1400px] items-center gap-3">
-            <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded border border-stone-200 bg-white/85 text-lg text-stone-600 transition hover:bg-white" title="����">
-              ��
+            <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded-full border border-stone-200 bg-white/85 text-lg text-stone-600 shadow-sm transition hover:bg-white" title="返回">
+              ←
             </button>
-            <button onClick={onOpenHome} className="rounded border border-stone-200 bg-white/85 px-4 py-2 text-sm font-semibold text-stone-700 transition hover:bg-white">
-              ��ҳ
+            <button onClick={onOpenHome} className="rounded-full border border-stone-200 bg-white/85 px-4 py-2 text-sm font-black text-stone-700 shadow-sm transition hover:bg-white">
+              首页
             </button>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded bg-[#ede3d4]">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-[#ede3d4]">
               <img src={meta.avatar} alt={meta.alias} className="h-full w-full object-cover" onError={event => { event.currentTarget.style.display = 'none'; }} />
             </div>
             <div className="min-w-0 flex-1">
-              <h1 className="truncate text-base font-semibold text-stone-950">������ʦ���ı��ι���̨</h1>
-              <p className="truncate text-xs text-stone-500">Χ�ƽ̰���˵�θ塢���ָ��������ϣ��ȶ���ѧ���ݣ������ɿɽ������ϡ�</p>
+              <h1 className="truncate text-base font-semibold text-stone-950">云桥老师语文备课工作台</h1>
+              <p className="truncate text-xs text-stone-500">围绕教案、说课稿、逐字稿和评课诊断，先定教学内容，再生成可交付材料。</p>
             </div>
-            <button onClick={onOpenCredits} className="rounded border border-stone-200 bg-white/85 px-4 py-2 text-xs font-semibold text-stone-600">
-              ����
+            <button onClick={onOpenCredits} className="rounded-full border border-stone-200 bg-white/85 px-4 py-2 text-xs font-black text-stone-600 shadow-sm">
+              积分
             </button>
           </div>
         </header>
 
         <main className="mx-auto grid min-h-0 w-full max-w-[1400px] flex-1 grid-cols-[340px_minmax(0,1fr)] gap-3 p-3">
-          <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-stone-200/80 bg-white/86">
+          <aside className="flex min-h-0 flex-col overflow-hidden rounded-[22px] border border-stone-200/80 bg-[#fffaf2]/86 shadow-[0_14px_36px_rgba(80,64,42,0.06)]">
             <div className="border-b border-stone-200/80 p-4">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a5a35]">���β���</p>
-              <h2 className="mt-1 text-lg font-semibold text-stone-950">�ȰѿηŽ���</h2>
-              <p className="mt-1 text-xs leading-5 text-stone-500">ƪ������Ԫ����κ��⡢���н̰���˵��Ҫ�󡢿��û�������ȷ����</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a5a35]">备课材料</p>
+              <h2 className="mt-1 text-lg font-semibold text-stone-950">先把课放进来</h2>
+              <p className="mt-1 text-xs leading-5 text-stone-500">篇名、单元导语、课后题、已有教案、说课要求、课堂活动都可以先放这里。</p>
             </div>
 
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
               <div className="grid grid-cols-2 gap-2">
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold text-stone-700">�꼶</span>
-                  <select value={workbench.grade} onChange={event => updateWorkbenchValue('grade', event.target.value)} className="h-9 w-full rounded border border-black/10 bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#8a5a35]">
-                    <option value="">�ɲ�ѡ</option>
-                    {['���꼶', '���꼶', '���꼶', '���꼶', '��һ', '����', '����', '��һ', '�߶�', '����'].map(item => <option key={item} value={item}>{item}</option>)}
+                  <span className="mb-1.5 block text-xs font-black text-stone-700">年级</span>
+                  <select value={workbench.grade} onChange={event => updateWorkbenchValue('grade', event.target.value)} className="h-9 w-full rounded-xl border border-[#eadfce] bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#8a5a35]">
+                    <option value="">可不选</option>
+                    {['三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三', '高一', '高二', '高三'].map(item => <option key={item} value={item}>{item}</option>)}
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold text-stone-700">����</span>
-                  <select value={workbench.materialType} onChange={event => updateWorkbenchValue('materialType', event.target.value)} className="h-9 w-full rounded border border-black/10 bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#8a5a35]">
-                    <option value="">�ɲ�ѡ</option>
-                    {['�̶���', '�Զ���', 'д����', '��Ԫ����', '��ϰ��', '����ĥ��', '��ȷ��'].map(item => <option key={item} value={item}>{item}</option>)}
+                  <span className="mb-1.5 block text-xs font-black text-stone-700">课型</span>
+                  <select value={workbench.materialType} onChange={event => updateWorkbenchValue('materialType', event.target.value)} className="h-9 w-full rounded-xl border border-[#eadfce] bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#8a5a35]">
+                    <option value="">可不选</option>
+                    {['教读课', '自读课', '写作课', '单元导读', '复习课', '评课磨课', '不确定'].map(item => <option key={item} value={item}>{item}</option>)}
                   </select>
                 </label>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
-                <input value={workbench.textbook} onChange={event => updateWorkbenchValue('textbook', event.target.value)} placeholder="�̲İ汾" className="h-9 rounded border border-black/10 bg-white px-3 text-xs outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" />
-                <input value={workbench.studentLevel} onChange={event => updateWorkbenchValue('studentLevel', event.target.value)} placeholder="ѧ�����" className="h-9 rounded border border-black/10 bg-white px-3 text-xs outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" />
+                <input value={workbench.textbook} onChange={event => updateWorkbenchValue('textbook', event.target.value)} placeholder="教材版本" className="h-9 rounded-xl border border-[#eadfce] bg-white px-3 text-xs outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" />
+                <input value={workbench.studentLevel} onChange={event => updateWorkbenchValue('studentLevel', event.target.value)} placeholder="学情简述" className="h-9 rounded-xl border border-[#eadfce] bg-white px-3 text-xs outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" />
               </div>
 
               <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold text-stone-700">�̲��뱸�β���</span>
+                <span className="mb-1.5 block text-xs font-black text-stone-700">教材与备课材料</span>
                 <textarea
                   value={workbench.material}
                   onChange={event => updateWorkbenchValue('material', event.target.value)}
-                  placeholder="ճ��ƪ������Ԫ����κ��⡢���н̰���˵�θ�Ҫ�󡢻���̻�������ָ�ݸ塣"
+                  placeholder="粘贴篇名、单元导语、课后题、已有教案、说课稿要求、活动流程或课堂逐字稿草稿。"
                   rows={10}
-                  className="w-full resize-none rounded border border-black/10 bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]"
+                  className="w-full resize-none rounded-2xl border border-[#eadfce] bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]"
                 />
               </label>
 
               <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold text-stone-700">����Ҫ��</span>
+                <span className="mb-1.5 block text-xs font-black text-stone-700">本次要求</span>
                 <textarea
                   value={workbench.goal}
                   onChange={event => updateWorkbenchValue('goal', event.target.value)}
-                  placeholder="���磺Ҫһ�� 40 ���ӽ̰���Ҫ 8 ����˵�θ壻Ҫ�����̸ĳ����ָ壻Ҫ���Ŀ��ͻ�Ƿ�һ�¡�"
+                  placeholder="例如：要一份 40 分钟教案；要 8 分钟说课稿；要把流程改成逐字稿；要诊断目标和活动是否一致。"
                   rows={3}
-                  className="w-full resize-none rounded border border-black/10 bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]"
+                  className="w-full resize-none rounded-2xl border border-[#eadfce] bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]"
                 />
               </label>
 
-              <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full rounded border border-dashed border-black/10 bg-white px-3 py-3 text-left transition hover:bg-white">
-                <span className="block text-[13px] font-semibold text-stone-950">�ϴ�����</span>
-                <span className="mt-1 block text-xs leading-5 text-stone-500">֧�� Word��PDF��TXT��Markdown��</span>
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full rounded-2xl border border-dashed border-[#d8c5aa] bg-white px-3 py-3 text-left transition hover:bg-[#fffdf8]">
+                <span className="block text-[13px] font-semibold text-stone-950">上传资料</span>
+                <span className="mt-1 block text-xs leading-5 text-stone-500">支持 Word、PDF、TXT、Markdown。</span>
               </button>
 
               {pendingFiles.length > 0 && (
                 <div className="grid gap-2">
                   {pendingFiles.map((file, index) => (
-                    <div key={`${file.name}-${index}`} className="flex items-center gap-2 rounded bg-[#fbf6ee] px-3 py-2 text-xs text-stone-700">
+                    <div key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-xl bg-[#fbf6ee] px-3 py-2 text-xs text-stone-700">
                       <span className="min-w-0 flex-1 truncate font-semibold">{file.name}</span>
-                      <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="�Ƴ�">x</button>
+                      <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="移除">x</button>
                     </div>
                   ))}
                 </div>
@@ -1980,32 +2192,32 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
             </div>
           </aside>
 
-          <section className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden rounded-md border border-stone-200/80 bg-white">
+          <section className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] overflow-hidden rounded-[22px] border border-stone-200/80 bg-white shadow-[0_14px_36px_rgba(80,64,42,0.06)]">
             <div className="border-b border-stone-200 bg-white p-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a5a35]">��������</p>
-                  <h2 className="mt-1 text-xl font-semibold text-stone-950">{yunqiaoTeachingWorkflow.title}</h2>
-                  <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-500">{yunqiaoTeachingWorkflow.intro}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a5a35]">交付类型</p>
+                  <h2 className="mt-1 text-xl font-semibold text-stone-950">{rongshengWorkflow.title}</h2>
+                  <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-500">{rongshengWorkflow.intro}</p>
                 </div>
-                <span className="shrink-0 rounded bg-[#f3eadc] px-2.5 py-1 text-[11px] font-semibold text-[#7a4c2c]">�ȶ�����</span>
+                <span className="shrink-0 rounded-full bg-[#f3eadc] px-2.5 py-1 text-[11px] font-semibold text-[#7a4c2c]">先定内容</span>
               </div>
             </div>
 
-            <div className="border-b border-stone-200 bg-white p-3">
+            <div className="border-b border-stone-200 bg-[#fffaf2] p-3">
               <div className="grid gap-2 md:grid-cols-3">
                 {deliveryWorkflows.map(workflow => {
-                  const active = activeYunqiaoTeachingWorkflow === Object.keys(YUNQIAO_TEACHING_WORKFLOWS).find(key => YUNQIAO_TEACHING_WORKFLOWS[key as YunqiaoTeachingWorkflowId] === workflow);
-                  const workflowId = Object.entries(YUNQIAO_TEACHING_WORKFLOWS).find(([, value]) => value === workflow)?.[0] as YunqiaoTeachingWorkflowId;
+                  const active = activeRongshengWorkflow === Object.keys(RONGSHENG_WORKFLOWS).find(key => RONGSHENG_WORKFLOWS[key as RongshengWorkflowId] === workflow);
+                  const workflowId = Object.entries(RONGSHENG_WORKFLOWS).find(([, value]) => value === workflow)?.[0] as RongshengWorkflowId;
                   return (
                     <button
                       key={workflow.label}
                       type="button"
                       onClick={() => {
-                        setActiveYunqiaoTeachingBoard('reading');
-                        setActiveYunqiaoTeachingWorkflow(workflowId);
+                        setActiveRongshengBoard('reading');
+                        setActiveRongshengWorkflow(workflowId);
                       }}
-                      className={`rounded border px-3 py-3 text-left transition ${active ? 'border-[#2f251d] bg-[#2f251d] text-white' : 'border-black/10 bg-white text-stone-800 hover:border-black/10'}`}
+                      className={`rounded-2xl border px-3 py-3 text-left transition ${active ? 'border-[#2f251d] bg-[#2f251d] text-white' : 'border-[#eadfce] bg-white text-stone-800 hover:border-[#d8c5aa]'}`}
                     >
                       <span className="block text-sm font-semibold">{workflow.label}</span>
                       <span className={`mt-1 block text-xs leading-5 ${active ? 'text-white/68' : 'text-stone-500'}`}>{workflow.title}</span>
@@ -2015,17 +2227,17 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {evidenceWorkflows.map(workflow => {
-                  const workflowId = Object.entries(YUNQIAO_TEACHING_WORKFLOWS).find(([, value]) => value === workflow)?.[0] as YunqiaoTeachingWorkflowId;
-                  const active = activeYunqiaoTeachingWorkflow === workflowId;
+                  const workflowId = Object.entries(RONGSHENG_WORKFLOWS).find(([, value]) => value === workflow)?.[0] as RongshengWorkflowId;
+                  const active = activeRongshengWorkflow === workflowId;
                   return (
                     <button
                       key={workflow.label}
                       type="button"
                       onClick={() => {
-                        setActiveYunqiaoTeachingBoard(workflow.board);
-                        setActiveYunqiaoTeachingWorkflow(workflowId);
+                        setActiveRongshengBoard(workflow.board);
+                        setActiveRongshengWorkflow(workflowId);
                       }}
-                      className={`rounded border px-3 py-1.5 text-xs font-semibold transition ${active ? 'border-[#8a5a35] bg-[#f0e4d3] text-[#5c3d24]' : 'border-black/10 bg-white text-stone-500 hover:text-stone-800'}`}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${active ? 'border-[#8a5a35] bg-[#f0e4d3] text-[#5c3d24]' : 'border-[#eadfce] bg-white text-stone-500 hover:text-stone-800'}`}
                     >
                       {workflow.label}
                     </button>
@@ -2036,20 +2248,20 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
 
             <div className="min-h-0 overflow-y-auto bg-[#fbf8f2] p-3">
               {creditBlocked && (
-                <div className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-                  <p className="font-semibold">���ֲ��㣬��ʱ���ܼ�������</p>
-                  <button type="button" onClick={onOpenCredits} className="mt-2 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600">ȥ��������</button>
+                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                  <p className="font-black">积分不足，暂时不能继续提问</p>
+                  <button type="button" onClick={onOpenCredits} className="mt-2 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-black text-white hover:bg-red-600">去积分中心</button>
                 </div>
               )}
-              {messagesLoading && <div className="py-16 text-center text-sm text-stone-400">������...</div>}
-              {messagesError && <div className="rounded border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">��Ϣ����ʧ�ܣ��뷵�����ԡ�</div>}
+              {messagesLoading && <div className="py-16 text-center text-sm text-stone-400">加载中...</div>}
+              {messagesError && <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">消息加载失败，请返回重试。</div>}
               {!messagesLoading && !messagesError && messages.length === 0 && !sending && (
-                <div className="rounded border border-dashed border-black/10 bg-white/65 px-6 py-8 text-center">
-                  <p className="text-base font-semibold text-stone-900">ѡ���Ʒ���ͣ����뱸�β��ϣ��Ϳ��Կ�ʼ��</p>
-                  <p className="mx-auto mt-2 max-w-lg text-xs leading-6 text-stone-500">������ʦ�����жϱ��κ��˵Ľ�ѧ���ݣ������ɽ̰���˵�θ塢���ָ����ϸĸ壬���ѿ���д�ɿ�ģ�塣</p>
+                <div className="rounded-2xl border border-dashed border-[#eadfce] bg-white/65 px-6 py-8 text-center">
+                  <p className="text-base font-semibold text-stone-900">选择成品类型，放入备课材料，就可以开始。</p>
+                  <p className="mx-auto mt-2 max-w-lg text-xs leading-6 text-stone-500">云桥老师会先判断本课合宜的教学内容，再生成教案、说课稿、逐字稿或诊断改稿，不把课堂写成空模板。</p>
                   <div className="mt-5 flex flex-wrap justify-center gap-2">
                     {YUNQIAO_JIAOXUE_QUESTIONS.map(question => (
-                      <button key={question} type="button" onClick={() => sendText(question)} className="rounded border border-black/10 bg-white/80 px-3 py-1.5 text-[11px] font-semibold text-stone-500 transition hover:border-black/10 hover:text-stone-700">
+                      <button key={question} type="button" onClick={() => sendText(question)} className="rounded-full border border-[#eadfce] bg-white/80 px-3 py-1.5 text-[11px] font-semibold text-stone-500 transition hover:border-[#d8c5aa] hover:text-stone-700">
                         {question}
                       </button>
                     ))}
@@ -2061,16 +2273,16 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
                 const isUser = msg.role === 'user';
                 return (
                   <div key={msg.id} className={`mb-4 flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[88%] rounded px-3.5 py-2.5 text-[13px] leading-6 ${isUser ? 'rounded-br-sm bg-[#2f251d] text-white' : 'rounded-bl-sm border border-black/10 bg-white text-stone-800'}`}>
+                    <div className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-6 shadow-sm ${isUser ? 'rounded-br-sm bg-[#2f251d] text-white' : 'rounded-bl-sm border border-[#eadfce] bg-white text-stone-800'}`}>
                       <MessageText content={msg.content} dark={isUser} />
                       <AttachmentList attachments={msg.attachments} dark={isUser} />
                       {!isUser && (
                         <div className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3">
-                          <button onClick={() => { navigator.clipboard.writeText(msg.content); showToast('�Ѹ���', 'info'); }} className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:bg-white">
-                            ����
+                          <button onClick={() => { navigator.clipboard.writeText(msg.content); showToast('已复制', 'info'); }} className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-black text-stone-600 transition hover:bg-white">
+                            复制
                           </button>
-                          <button onClick={() => downloadWordDocument(conversationTitle || yunqiaoTeachingWorkflow.title || 'AI �ش�', msg.content)} className="rounded-lg border border-black/10 bg-[#fbf6ee] px-3 py-1.5 text-xs font-semibold text-[#7a4c2c] transition hover:bg-white">
-                            ���� Word
+                          <button onClick={() => downloadWordDocument(conversationTitle || rongshengWorkflow.title || 'AI 回答', msg.content)} className="rounded-lg border border-[#eadfce] bg-[#fbf6ee] px-3 py-1.5 text-xs font-black text-[#7a4c2c] transition hover:bg-white">
+                            下载 Word
                           </button>
                         </div>
                       )}
@@ -2081,7 +2293,7 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
 
               {streamingContent && (
                 <div className="mb-4 flex justify-start">
-                  <div className="max-w-[88%] rounded rounded-bl-sm border border-black/10 bg-white px-3.5 py-2.5 text-[13px] leading-6 text-stone-800">
+                  <div className="max-w-[88%] rounded-2xl rounded-bl-sm border border-[#eadfce] bg-white px-3.5 py-2.5 text-[13px] leading-6 text-stone-800 shadow-sm">
                     <MessageText content={streamingContent} />
                     <span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-[#8a5a35] align-middle" />
                   </div>
@@ -2093,7 +2305,7 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
             <div className="border-t border-stone-200 bg-white p-2.5">
               <input ref={fileInputRef} type="file" multiple accept=".pdf,.txt,.md,.doc,.docx" onChange={event => chooseFiles(event.target.files)} className="hidden" />
               <div className="flex gap-2">
-                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="grid h-10 w-10 shrink-0 place-items-center rounded border border-stone-300 bg-white text-lg text-stone-700 transition hover:border-[#8a5a35] hover:text-[#8a5a35] disabled:opacity-40" title="�ϴ�����">
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-stone-300 bg-white text-lg text-stone-700 shadow-sm transition hover:border-[#8a5a35] hover:text-[#8a5a35] disabled:opacity-40" title="上传附件">
                   +
                 </button>
                 <input
@@ -2102,14 +2314,14 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
                   value={input}
                   onChange={event => setInput(event.target.value)}
                   onKeyDown={event => event.key === 'Enter' && sendText(input)}
-                  placeholder={sending ? '�ȴ� AI �ظ���...' : '����Ҫ��Ҳ����ֻ������'}
-                  className="min-w-0 flex-1 rounded border border-stone-300 bg-white px-3 py-2 text-[13px] text-stone-900 outline-none placeholder:text-stone-400 focus:border-[#8a5a35] focus:ring-1 focus:ring-[#8a5a35]/20"
+                  placeholder={sending ? '等待 AI 回复中...' : '补充要求，也可以只发附件'}
+                  className="min-w-0 flex-1 rounded-xl border border-stone-300 bg-white px-3 py-2 text-[13px] text-stone-900 outline-none placeholder:text-stone-400 focus:border-[#8a5a35] focus:ring-1 focus:ring-[#8a5a35]/20"
                 />
-                <button onClick={() => sendText(yunqiaoTeachingWorkflow.prompt)} disabled={sending} className="shrink-0 rounded bg-[#2f251d] px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-[#4a3728] disabled:opacity-40">
-                  {yunqiaoTeachingWorkflow.button}
+                <button onClick={() => sendText(rongshengWorkflow.prompt)} disabled={sending} className="shrink-0 rounded-xl bg-[#2f251d] px-4 py-2 text-[13px] font-semibold text-white shadow transition hover:bg-[#4a3728] disabled:opacity-40">
+                  {rongshengWorkflow.button}
                 </button>
-                <button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="grid h-10 w-10 shrink-0 place-items-center rounded bg-stone-900 text-white transition hover:bg-stone-800 disabled:opacity-40" title="���Ͳ���">
-                  ��
+                <button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-stone-900 text-white shadow transition hover:bg-stone-800 disabled:opacity-40" title="发送补充">
+                  →
                 </button>
               </div>
             </div>
@@ -2119,39 +2331,334 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
     );
   }
 
+  if (isQingheXiezuo) {
+    const qingheWorkspaceIds = new Set<string>();
+    let nextAssistantBelongsToWorkspace = false;
+    for (const message of messages) {
+      if (message.role === 'user') {
+        nextAssistantBelongsToWorkspace = qingheWorkspacePrompts.has(message.content.trim());
+        if (nextAssistantBelongsToWorkspace) qingheWorkspaceIds.add(message.id);
+        continue;
+      }
+      if (message.role === 'assistant' && nextAssistantBelongsToWorkspace) {
+        qingheWorkspaceIds.add(message.id);
+        nextAssistantBelongsToWorkspace = false;
+      }
+    }
+    qinghePreviewMessageIds.forEach(id => qingheWorkspaceIds.add(id));
+    const assistantMessages = messages.filter(message => message.role === 'assistant' && qingheWorkspaceIds.has(message.id));
+    const chatMessages = messages.filter(message => !qingheWorkspaceIds.has(message.id));
+    const qingheWorkspaceRunning = qingheWorkspaceSending && sending;
+    const selectedQingheWork = QINGHE_WORKS.find(item => item.id === activeQingheWork) || QINGHE_WORKS[0];
+    const groupedQingheWorks = Array.from(new Set(QINGHE_WORKS.map(item => item.group))).map(group => ({
+      group,
+      items: QINGHE_WORKS.filter(item => item.group === group),
+    }));
+    const qingheConditionSummary = [
+      workbench.background && `使用场景：${workbench.background}`,
+      workbench.grade && `年级：${workbench.grade}`,
+      workbench.prompt && `作文题/训练主题：${workbench.prompt}`,
+      workbench.materialType && `文体/类型：${workbench.materialType}`,
+      workbench.classType && `班型：${workbench.classType}`,
+      workbench.studentLevel && `学生水平：${workbench.studentLevel}`,
+      workbench.lessonDuration && `课时：${workbench.lessonDuration}`,
+      (workbench.specificGoal || workbench.goal) && `目标：${workbench.specificGoal || workbench.goal}`,
+      workbench.output && `需要文本：${workbench.output}`,
+    ].filter(Boolean).join('\n');
+    const runQingheGeneration = () => {
+      const requestText = [
+        selectedQingheWork.prompt,
+        qingheConditionSummary ? `\n【教学条件】\n${qingheConditionSummary}` : '',
+        workbench.material ? `\n【资料与补充要求】\n${workbench.material}` : '',
+      ].join('\n').trim();
+      qingheWorkspacePromptsRef.current.add(requestText);
+      setQingheWorkspacePrompts(prev => new Set(prev).add(requestText));
+      setQingheWorkspaceSending(true);
+      sendText(requestText);
+    };
+
+    return (
+      <div className="flex h-screen flex-col overflow-hidden bg-[#f5f7f5] text-stone-950">
+        <header className="shrink-0 border-b border-black/10 bg-white/95 py-2.5 backdrop-blur-xl">
+          <div className="mx-auto flex w-full max-w-[1600px] items-center gap-3 px-3">
+            <button onClick={onBack} className="grid h-9 w-9 place-items-center rounded-md border border-black/10 bg-white text-stone-600 transition hover:bg-[#f7faf8]" title="返回">←</button>
+            <button onClick={onOpenHome} className="rounded-md border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition hover:bg-[#f7faf8]">首页</button>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-[15px] font-semibold text-stone-950">青禾老师写作教学工作台</h1>
+              <p className="truncate text-xs text-stone-500">点选生成、填空起稿、自然语言沟通都可以。</p>
+            </div>
+            <button onClick={onOpenCredits} className="rounded-md border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-stone-600">积分</button>
+          </div>
+        </header>
+
+        <main className="mx-auto grid min-h-0 w-full max-w-[1600px] flex-1 grid-cols-[260px_minmax(0,1fr)_390px] gap-3 p-3">
+          <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-black/10 bg-white">
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
+              <p className="px-2 py-1 text-[12px] font-semibold text-stone-900">任务目录</p>
+              {groupedQingheWorks.map(section => (
+                <div key={section.group} className="mt-2 border-t border-stone-200/80 pt-2 first:mt-0 first:border-t-0 first:pt-0">
+                  <p className="px-2 py-1 text-[11px] font-semibold text-stone-500">{section.group}</p>
+                  <div className="grid gap-1">
+                    {section.items.map(item => {
+                      const active = activeQingheWork === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            setActiveQingheWork(item.id);
+                            updateWorkbenchValue('output', item.output);
+                          }}
+                          className={`rounded border px-3 py-2 text-left transition ${active ? 'border-[#245f55] bg-[#e5f1ec] text-[#1f5a50]' : 'border-transparent text-stone-800 hover:border-black/10 hover:bg-[#f7faf8]'}`}
+                        >
+                          <span className="block text-[13px] font-semibold">{item.label}</span>
+                          <span className="mt-0.5 block text-[11px] leading-4 text-stone-500">{item.hint}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+
+          <section className="flex min-h-0 flex-col overflow-hidden rounded-md border border-black/10 bg-white">
+            <div className="shrink-0 border-b border-black/8 p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold text-[#245f55]">{selectedQingheWork.group} / {selectedQingheWork.label}</p>
+                  <h2 className="mt-1 text-xl font-semibold text-stone-950">{selectedQingheWork.title}</h2>
+                  <p className="mt-1 text-sm leading-6 text-stone-500">{selectedQingheWork.hint}</p>
+                </div>
+                <button onClick={runQingheGeneration} disabled={sending} className="shrink-0 rounded-md bg-[#245f55] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1f4f48] disabled:opacity-40">
+                  {selectedQingheWork.button}
+                </button>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto bg-[#f7faf8] p-4">
+              {creditBlocked && (
+                <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                  <p className="font-semibold">积分不足</p>
+                  <button type="button" onClick={onOpenCredits} className="mt-2 rounded-md bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600">去积分中心</button>
+                </div>
+              )}
+              {messagesLoading && <div className="py-10 text-center text-sm text-stone-400">加载中...</div>}
+              {messagesError && <div className="rounded-md border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">消息加载失败，请返回重试。</div>}
+
+              <div className="grid gap-3">
+                <div className="rounded-md border border-black/10 bg-white p-3">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <p className="text-xs font-semibold text-stone-700">教学条件</p>
+                    <span className="text-[11px] text-stone-400">不确定可留空</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-stone-500">年级</span>
+                      <select value={workbench.grade} onChange={event => updateWorkbenchValue('grade', event.target.value)} className="h-9 w-full rounded-md border border-black/10 bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#245f55]">
+                        <option value="">可不选</option>
+                        {QINGHE_GRADE_OPTIONS.map(item => <option key={item} value={item}>{item}</option>)}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-stone-500">使用场景</span>
+                      <select value={workbench.background} onChange={event => updateWorkbenchValue('background', event.target.value)} className="h-9 w-full rounded-md border border-black/10 bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#245f55]">
+                        <option value="">可不选</option>
+                        {QINGHE_SCENE_OPTIONS.map(item => <option key={item} value={item}>{item}</option>)}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-stone-500">文体/类型</span>
+                      <select value={workbench.materialType} onChange={event => updateWorkbenchValue('materialType', event.target.value)} className="h-9 w-full rounded-md border border-black/10 bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#245f55]">
+                        <option value="">可不选</option>
+                        {QINGHE_WRITING_TYPE_OPTIONS.map(item => <option key={item} value={item}>{item}</option>)}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-stone-500">班型</span>
+                      <select value={workbench.classType} onChange={event => updateWorkbenchValue('classType', event.target.value)} className="h-9 w-full rounded-md border border-black/10 bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#245f55]">
+                        <option value="">可不选</option>
+                        {QINGHE_CLASS_TYPE_OPTIONS.map(item => <option key={item} value={item}>{item}</option>)}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-stone-500">学生水平</span>
+                      <select value={workbench.studentLevel} onChange={event => updateWorkbenchValue('studentLevel', event.target.value)} className="h-9 w-full rounded-md border border-black/10 bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#245f55]">
+                        <option value="">可不选</option>
+                        {QINGHE_STUDENT_LEVEL_OPTIONS.map(item => <option key={item} value={item}>{item}</option>)}
+                      </select>
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-[11px] font-semibold text-stone-500">课时</span>
+                      <select value={workbench.lessonDuration} onChange={event => updateWorkbenchValue('lessonDuration', event.target.value)} className="h-9 w-full rounded-md border border-black/10 bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#245f55]">
+                        <option value="">可不选</option>
+                        {QINGHE_DURATION_OPTIONS.map(item => <option key={item} value={item}>{item}</option>)}
+                      </select>
+                    </label>
+                    <label className="block xl:col-span-2">
+                      <span className="mb-1 block text-[11px] font-semibold text-stone-500">作文题/训练主题</span>
+                      <input value={workbench.prompt} onChange={event => updateWorkbenchValue('prompt', event.target.value)} placeholder="例如：那一刻，我长大了；细节描写训练" className="h-9 w-full rounded-md border border-black/10 bg-white px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#245f55]" />
+                    </label>
+                    <label className="block xl:col-span-2">
+                      <span className="mb-1 block text-[11px] font-semibold text-stone-500">本次目标</span>
+                      <input value={workbench.specificGoal} onChange={event => { updateWorkbenchValue('specificGoal', event.target.value); updateWorkbenchValue('goal', event.target.value); }} placeholder="例如：把一件事写具体；整理一套初二记叙文课程" className="h-9 w-full rounded-md border border-black/10 bg-white px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#245f55]" />
+                    </label>
+                  </div>
+                </div>
+
+                <label className="block rounded-md border border-black/10 bg-white p-3">
+                  <span className="mb-2 block text-xs font-semibold text-stone-700">资料与补充要求</span>
+                  <textarea
+                    value={workbench.material}
+                    onChange={event => updateWorkbenchValue('material', event.target.value)}
+                    placeholder="可粘贴学生作文、作文题、已有教案、课程目录、素材、课堂记录；也可以直接写一句完整需求。留空也会按教学条件生成假设版。"
+                    rows={6}
+                    className="w-full resize-none rounded-md border border-black/10 bg-white px-3 py-2 text-sm leading-6 text-stone-900 outline-none placeholder:text-stone-400 focus:border-[#245f55]"
+                  />
+                </label>
+
+                {pendingFiles.length > 0 && (
+                  <div className="rounded-md border border-black/10 bg-white p-3">
+                    <p className="mb-2 text-xs font-semibold text-stone-700">待发送附件</p>
+                    <div className="flex flex-wrap gap-2">
+                      {pendingFiles.map((file, index) => (
+                        <div key={`${file.name}-${index}`} className="flex max-w-full items-center gap-2 rounded-md border border-black/10 bg-[#f7faf8] px-2.5 py-1.5 text-xs text-stone-700">
+                          <span className="max-w-52 truncate font-semibold">{file.name}</span>
+                          <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600">×</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <input ref={fileInputRef} type="file" multiple accept=".pdf,.txt,.md,.doc,.docx" onChange={event => chooseFiles(event.target.files)} className="hidden" />
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="rounded-md border border-black/10 bg-white px-3 py-2 text-xs font-semibold text-stone-700 transition hover:border-[#245f55] disabled:opacity-40">上传资料</button>
+                  <button onClick={runQingheGeneration} disabled={sending} className="rounded-md bg-[#245f55] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#1f4f48] disabled:opacity-40">{selectedQingheWork.button}</button>
+                </div>
+
+                <div className="rounded-md border border-black/10 bg-white">
+                  <div className="flex items-center justify-between border-b border-black/8 px-3 py-2">
+                    <p className="text-xs font-semibold text-stone-700">生成预览</p>
+                    <span className="text-[11px] text-stone-400">确认后可下载 Word</span>
+                  </div>
+                  <div className="min-h-[260px] p-4">
+                    {!messagesLoading && !messagesError && assistantMessages.length === 0 && !qingheWorkspaceRunning && (
+                      <div className="flex h-[240px] items-center justify-center text-center">
+                        <div className="max-w-sm">
+                          <p className="text-sm font-semibold text-stone-700">{selectedQingheWork.label}</p>
+                          <p className="mt-2 text-xs leading-6 text-stone-500">点击生成后，这里会显示可修改、可复制、可下载的成品预览。</p>
+                        </div>
+                      </div>
+                    )}
+                    {assistantMessages.map(msg => (
+                      <div key={msg.id} className="mb-4 rounded-md border border-black/10 bg-white px-4 py-3 text-[13px] leading-6 text-stone-800">
+                        <MessageText content={msg.content} />
+                        <AttachmentList attachments={msg.attachments} />
+                        <div className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3">
+                          <button onClick={() => { navigator.clipboard.writeText(msg.content); showToast('已复制', 'info'); }} className="rounded-md border border-black/10 bg-stone-50 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:bg-white">复制</button>
+                          <button onClick={() => downloadWordDocument(conversationTitle || selectedQingheWork.title || '青禾老师生成内容', msg.content)} className="rounded-md border border-black/10 bg-[#e5f1ec] px-3 py-1.5 text-xs font-semibold text-[#1f5a50] transition hover:bg-white">下载 Word</button>
+                        </div>
+                      </div>
+                    ))}
+                    {qingheWorkspaceRunning && streamingContent && (
+                      <div className="rounded-md border border-black/10 bg-white px-4 py-3 text-[13px] leading-6 text-stone-800">
+                        <MessageText content={streamingContent} />
+                        <span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-[#245f55] align-middle" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-black/10 bg-white">
+            <div className="border-b border-black/8 p-3">
+              <p className="text-sm font-semibold text-stone-900">和青禾老师聊</p>
+              <p className="mt-1 text-xs leading-5 text-stone-500">像和同事沟通一样，补充材料、讨论取舍、让她按你的意见改到定稿。</p>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto bg-[#f7faf8] p-3">
+              {chatMessages.length === 0 && !sending && (
+                <div className="flex h-full items-center justify-center text-center">
+                  <p className="max-w-[220px] text-xs leading-6 text-stone-400">这里保留自由对话；主区生成的任务内容不会重复塞进来。</p>
+                </div>
+              )}
+              {chatMessages.map(msg => {
+                const isUser = msg.role === 'user';
+                return (
+                  <div key={msg.id} className={`mb-4 flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[88%] rounded-md px-3.5 py-2.5 text-[13px] leading-6 ${isUser ? 'rounded-br-sm bg-[#245f55] text-white' : 'rounded-bl-sm border border-black/10 bg-white text-stone-800'}`}>
+                      <MessageText content={msg.content} dark={isUser} />
+                      <AttachmentList attachments={msg.attachments} dark={isUser} />
+                    </div>
+                  </div>
+                );
+              })}
+              {streamingContent && !qingheWorkspaceRunning && (
+                <div className="mb-4 flex justify-start">
+                  <div className="max-w-[88%] rounded-md rounded-bl-sm border border-black/10 bg-white px-3.5 py-2.5 text-[13px] leading-6 text-stone-800">
+                    <MessageText content={streamingContent} />
+                    <span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-[#245f55] align-middle" />
+                  </div>
+                </div>
+              )}
+              <div ref={bottomRef} />
+            </div>
+
+            <div className="shrink-0 border-t border-black/8 bg-white p-2.5">
+              <div className="flex gap-2">
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-black/10 bg-white text-lg text-stone-700 transition hover:border-[#245f55] disabled:opacity-40" title="上传附件">+</button>
+                <input
+                  ref={inputRef}
+                  value={input}
+                  onChange={event => setInput(event.target.value)}
+                  onKeyDown={event => event.key === 'Enter' && sendText(input)}
+                  placeholder={sending ? '等待回复中...' : '和青禾老师说说你的想法'}
+                  className="h-10 min-w-0 flex-1 rounded-md border border-black/10 bg-white px-3 text-[13px] text-stone-900 outline-none placeholder:text-stone-400 focus:border-[#245f55]"
+                />
+                <button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-stone-900 text-white transition hover:bg-stone-800 disabled:opacity-40" title="发送">→</button>
+              </div>
+            </div>
+          </aside>
+        </main>
+      </div>
+    );
+  }
+
   if (isStructuredTeacher) {
     return (
-      <div className="flex h-screen flex-col overflow-hidden bg-[var(--bg)] text-stone-950">
-        <header className="shrink-0 border-b border-stone-200/70 bg-white/82 px-4 py-2.5 backdrop-blur-xl">
+      <div className={`flex h-screen flex-col overflow-hidden ${structuredAccent.page} text-stone-950`}>
+        <header className={`shrink-0 border-b ${structuredAccent.header} px-4 py-2.5 shadow-[0_1px_20px_rgba(80,64,42,0.05)] backdrop-blur-xl`}>
           <div className="mx-auto flex max-w-[1440px] items-center gap-3">
-            <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded border border-stone-200 bg-white/85 text-lg text-stone-600 transition hover:bg-white" title="����">
-              ��
+            <button onClick={onBack} className="grid h-10 w-10 place-items-center rounded-full border border-stone-200 bg-white/85 text-lg text-stone-600 shadow-sm transition hover:bg-white" title="返回">
+              ←
             </button>
-            <button onClick={onOpenHome} className="rounded border border-stone-200 bg-white/85 px-4 py-2 text-sm font-semibold text-stone-700 transition hover:bg-white">
-              ��ҳ
+            <button onClick={onOpenHome} className="rounded-full border border-stone-200 bg-white/85 px-4 py-2 text-sm font-black text-stone-700 shadow-sm transition hover:bg-white">
+              首页
             </button>
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-base font-semibold text-stone-950">{structuredHeaderTitle}</h1>
               <p className="truncate text-xs text-stone-500">{structuredHeaderHint}</p>
             </div>
-            <button onClick={() => setTeacherLibraryOpen(prev => !prev)} className="rounded border border-stone-200 bg-white/85 px-4 py-2 text-xs font-semibold text-stone-600 transition hover:bg-white">
-              {teacherLibraryOpen ? '������Ͽ�' : 'չ�����Ͽ�'}
+            <button onClick={() => setTeacherLibraryOpen(prev => !prev)} className="rounded-full border border-stone-200 bg-white/85 px-4 py-2 text-xs font-black text-stone-600 shadow-sm transition hover:bg-white">
+              {teacherLibraryOpen ? '收起材料库' : '展开材料库'}
             </button>
-            <button onClick={onOpenCredits} className="rounded border border-stone-200 bg-white/85 px-4 py-2 text-xs font-semibold text-stone-600">
-              ����
+            <button onClick={onOpenCredits} className="rounded-full border border-stone-200 bg-white/85 px-4 py-2 text-xs font-black text-stone-600 shadow-sm">
+              积分
             </button>
           </div>
         </header>
 
         <main className={`mx-auto grid min-h-0 w-full max-w-[1440px] flex-1 gap-3 p-3 transition-[grid-template-columns] duration-300 ${teacherLibraryOpen ? 'grid-cols-[292px_minmax(0,1fr)_292px]' : 'grid-cols-[292px_minmax(0,1fr)_52px]'}`}>
-          <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-stone-200/80 bg-white/86">
+          <aside className={`flex min-h-0 flex-col overflow-hidden rounded-[22px] border ${structuredAccent.panel} shadow-[0_14px_36px_rgba(80,64,42,0.06)]`}>
             <div className="border-b border-stone-200/80 p-3">
               <div className="flex items-center gap-2.5">
-                <div className="h-10 w-10 shrink-0 overflow-hidden rounded bg-[#f0e9dd]">
+                <div className={`h-10 w-10 shrink-0 overflow-hidden rounded-2xl ${structuredAccent.soft}`}>
                   <img src={meta.avatar} alt={meta.alias} className="h-full w-full object-cover" onError={event => { event.currentTarget.style.display = 'none'; }} />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-[15px] font-semibold text-stone-950">{isSongyueShici ? 'ʫ�ʽ�ѧ���' : '������'}</p>
+                  <p className="text-[15px] font-semibold text-stone-950">{isSongyueShici ? '诗词教学入口' : isQingheXiezuo ? '任务目录' : '任务树'}</p>
                   <p className="mt-0.5 truncate text-xs leading-5 text-stone-500">{structuredWorkflow.title}</p>
                 </div>
               </div>
@@ -2172,7 +2679,7 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
                             setActivePoetryBoard(workflow.board);
                             setActivePoetryWorkflow(workflowId);
                           }}
-                          className={`min-w-0 rounded border px-3 py-2.5 text-left transition ${active ? 'border-[#2f251d] bg-[#2f251d] text-white' : 'border-black/10 bg-white text-stone-800 hover:border-black/10 hover:bg-white'}`}
+                          className={`min-w-0 rounded-2xl border px-3 py-2.5 text-left transition ${active ? 'border-[#2f251d] bg-[#2f251d] text-white shadow-sm' : 'border-[#eadfce] bg-white text-stone-800 hover:border-[#d8c5aa] hover:bg-[#fffdf8]'}`}
                         >
                           <span className="block text-[13px] font-semibold">{workflow.label}</span>
                           <span className={`mt-1 block whitespace-normal break-words text-[11px] leading-4 ${active ? 'text-white/70' : 'text-stone-500'}`}>{workflow.title}</span>
@@ -2181,11 +2688,11 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
                     })}
                   </div>
                 ) : structuredBoards.map(board => (
-                  <div key={board.id} className="overflow-hidden rounded border border-black/10 bg-white p-2">
+                  <div key={board.id} className={`overflow-hidden rounded-2xl border ${structuredAccent.taskBorder} bg-white p-2`}>
                     <button
                       type="button"
                       onClick={() => selectStructuredBoard(board.id)}
-                      className={`w-full rounded px-2.5 py-2 text-left transition ${isStructuredBoardActive(board.id) ? 'bg-[#2f251d] text-white' : 'bg-[#f8f4ed] text-stone-800 hover:bg-[#f2eadf]'}`}
+                      className={`w-full rounded-xl px-2.5 py-2 text-left transition ${isStructuredBoardActive(board.id) ? structuredAccent.taskActive : `${structuredAccent.soft} text-stone-800 hover:bg-white`}`}
                     >
                       <span className="block text-[13px] font-semibold">{board.label}</span>
                       <span className={`mt-1 block whitespace-normal break-words text-[11px] leading-4 ${isStructuredBoardActive(board.id) ? 'text-white/70' : 'text-stone-500'}`}>{board.hint}</span>
@@ -2199,7 +2706,7 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
                             key={workflowId}
                             type="button"
                             onClick={() => selectStructuredWorkflow(board.id, workflowId)}
-                            className={`min-w-0 rounded px-2.5 py-1.5 text-left text-xs transition ${active ? 'bg-[#f0e4d3] text-[#5c3d24]' : 'text-stone-600 hover:bg-[#faf7f2]'}`}
+                            className={`min-w-0 rounded-xl px-2.5 py-1.5 text-left text-xs transition ${active ? structuredAccent.taskSubActive : 'text-stone-600 hover:bg-stone-50'}`}
                           >
                             <span className="font-semibold">{workflow.label}</span>
                             <span className="mt-0.5 block whitespace-normal break-words text-[11px] leading-4 opacity-75">{workflow.title}</span>
@@ -2214,98 +2721,98 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full rounded border border-black/10 bg-white px-3 py-3 text-left transition hover:border-black/10 hover:bg-white"
+                className={`w-full rounded-2xl border ${structuredAccent.taskBorder} bg-white px-3 py-3 text-left shadow-sm transition ${structuredAccent.hover}`}
               >
-                <span className="block text-[13px] font-semibold text-stone-950">�ϴ�����</span>
-                <span className="mt-1 block text-xs leading-5 text-stone-500">{isSongyueShici ? 'ʫ��ԭ�ġ�ע�͡����塢����Ϳ���Ҫ�󶼿��ԡ�' : isYunqiaoJiaoxue ? '���ġ��κ��⡢�̰������ơ������μ�¼�����ԡ�' : '���ġ��̰������塢˵�θ塢�زİ������ԡ�'}</span>
+                <span className="block text-[13px] font-semibold text-stone-950">上传资料</span>
+                  <span className="mt-1 block text-xs leading-5 text-stone-500">{isSongyueShici ? '诗词原文、注释、讲稿、板书和课堂要求都可以。' : isYunqiaoJiaoxue ? '课文、课后题、教案、活动设计、听评课记录都可以。' : '学生作文、作文题、教案、讲义、说课稿、素材包都可以。'}</span>
               </button>
 
               {pendingFiles.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-xs font-semibold text-stone-500">����������</p>
+                  <p className="text-xs font-black text-stone-500">待发送资料</p>
                   {pendingFiles.map((file, index) => (
-                    <div key={`${file.name}-${index}`} className="flex items-center gap-2 rounded border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-700">
+                    <div key={`${file.name}-${index}`} className="flex items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-700">
                       <span className="min-w-0 flex-1 truncate font-semibold">{file.name}</span>
-                      <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="�Ƴ�">x</button>
+                      <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="移除">x</button>
                     </div>
                   ))}
                 </div>
               )}
 
                   <label className="block">
-                    <span className="mb-1.5 block text-xs font-semibold text-stone-700">������������ѡ��</span>
+                    <span className="mb-1.5 block text-xs font-black text-stone-700">公共背景（可选）</span>
                     <textarea
                       value={workbench.background}
                       onChange={event => updateWorkbenchValue('background', event.target.value)}
-                      placeholder={isSongyueShici ? '���磺����ͳ��桢���ſΡ�ѧ���ܱ������ὲ���������в�Ρ�Ҳ������ա�' : isYunqiaoJiaoxue ? '���磺����ͳ��桢��Ԫ��ѵ��������д��ѧ�����ı�����̸ֻ���⡣Ҳ������ա�' : '���磺����С�ࡢ�����ѵ��ϸ����д��ѧ���ձ�ṹ��ɢ��Ҳ������ա�'}
+                      placeholder={isSongyueShici ? '例如：初二统编版、社团课、学生能背但不会讲出意象和情感层次。也可以留空。' : isYunqiaoJiaoxue ? '例如：初二统编版、单元在训练人物描写、学生读文本容易只谈主题。也可以留空。' : '例如：初二小班、最近在训练细节描写、学生普遍结构松散。也可以留空。'}
                       rows={4}
-                      className="w-full rounded border border-black/10 bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]"
+                      className={`w-full rounded-xl border ${structuredAccent.taskBorder} bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 ${structuredAccent.focus}`}
                     />
                   </label>
 
               <div className="grid grid-cols-2 gap-2">
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold text-stone-700">{isSongyueShici ? 'ѧ��' : '�꼶'}</span>
-                  <select value={workbench.grade} onChange={event => updateWorkbenchValue('grade', event.target.value)} className="h-9 w-full rounded border border-black/10 bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#8a5a35]">
-                    <option value="">�ɲ�ѡ</option>
-                    {(isSongyueShici ? ['Сѧ���꼶', '����', '����', '��ѧͨʶ', '������ѧ', '��ȷ��'] : ['���꼶', '���꼶', '���꼶', '���꼶', '��һ', '����', '����', '��һ', '�߶�', '����']).map(item => (
+                  <span className="mb-1.5 block text-xs font-black text-stone-700">{isSongyueShici ? '学段' : '年级'}</span>
+                  <select value={workbench.grade} onChange={event => updateWorkbenchValue('grade', event.target.value)} className={`h-9 w-full rounded-xl border ${structuredAccent.taskBorder} bg-white px-2 text-xs text-stone-800 outline-none ${structuredAccent.focus}`}>
+                    <option value="">可不选</option>
+                    {(isSongyueShici ? ['小学高年级', '初中', '高中', '大学通识', '成人自学', '不确定'] : ['三年级', '四年级', '五年级', '六年级', '初一', '初二', '初三', '高一', '高二', '高三']).map(item => (
                       <option key={item} value={item}>{item}</option>
                     ))}
                   </select>
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold text-stone-700">{isSongyueShici ? '����' : 'ˮƽ'}</span>
-                  <select value={workbench.studentLevel} onChange={event => updateWorkbenchValue('studentLevel', event.target.value)} className="h-9 w-full rounded border border-black/10 bg-white px-2 text-xs text-stone-800 outline-none focus:border-[#8a5a35]">
-                    <option value="">�ɲ�ѡ</option>
-                    {(isSongyueShici ? ['��ѧ', '�л���', '������ϰ', '������չ', '��ȷ��'] : ['��������', '�е�', '�Ϻ�', '��ȷ��']).map(item => (
+                  <span className="mb-1.5 block text-xs font-black text-stone-700">{isSongyueShici ? '基础' : '水平'}</span>
+                  <select value={workbench.studentLevel} onChange={event => updateWorkbenchValue('studentLevel', event.target.value)} className={`h-9 w-full rounded-xl border ${structuredAccent.taskBorder} bg-white px-2 text-xs text-stone-800 outline-none ${structuredAccent.focus}`}>
+                    <option value="">可不选</option>
+                    {(isSongyueShici ? ['初学', '有基础', '备考复习', '社团拓展', '不确定'] : ['基础薄弱', '中等', '较好', '不确定']).map(item => (
                       <option key={item} value={item}>{item}</option>
                     ))}
                   </select>
                 </label>
               </div>
 
-              <div className="rounded border border-black/10 bg-[#fbf6ee] px-3 py-2.5 text-xs leading-5 text-stone-600">
-                <p className="font-semibold text-stone-800">ʹ�÷�ʽ</p>
-                  <p className="mt-1">{isSongyueShici ? '���ѡʫ�ʽ�ѧ�����м�������������Ҳಹԭ�ġ�ע�͡�����Ϳ���Ҫ��' : isYunqiaoJiaoxue ? '���ѡ�����м����ѧ�����жϣ��Ҳಹ�̲�֤�ݺͻ���ϡ�' : '���ѡ�����м����Ʒ��������Ҳఴ��չ�����Ͽ⡣'}</p>
+              <div className={`rounded-2xl border ${structuredAccent.taskBorder} ${structuredAccent.soft} px-3 py-2.5 text-xs leading-5 text-stone-600`}>
+                <p className="font-semibold text-stone-800">使用方式</p>
+                  <p className="mt-1">{isSongyueShici ? '左侧选诗词教学任务，中间出讲读方案，右侧补原文、注释、讲稿和课堂要求。' : isYunqiaoJiaoxue ? '左侧选任务，中间出教学内容判断，右侧补教材证据和活动材料。' : '左侧选任务，中间出成品和意见，右侧按需展开材料库。'}</p>
               </div>
             </div>
           </aside>
 
-          <section className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-md border border-stone-200/80 bg-white">
+          <section className={`grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-[22px] border ${structuredAccent.panel} shadow-[0_14px_36px_rgba(80,64,42,0.06)]`}>
             <div className="border-b border-stone-200 bg-white p-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-semibold text-[#8a5a35]">{isSongyueShici ? 'ʫ�ʽ�ѧ' : structuredBoards.find(item => item.id === structuredWorkflow.board)?.label} / {structuredWorkflow.label}</p>
+                  <p className={`text-[11px] font-semibold ${structuredAccent.ink}`}>{isSongyueShici ? '诗词教学' : structuredBoards.find(item => item.id === structuredWorkflow.board)?.label} / {structuredWorkflow.label}</p>
                   <h2 className="mt-1 text-lg font-semibold text-stone-950">{structuredWorkflow.title}</h2>
                   <p className="mt-1 max-w-3xl text-xs leading-5 text-stone-500">{structuredWorkflow.intro}</p>
                 </div>
-                <span className="shrink-0 rounded bg-[#f3eadc] px-2.5 py-1 text-[11px] font-semibold text-[#7a4c2c]">�ֶοɿ�</span>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${structuredAccent.chip}`}>字段可空</span>
               </div>
             </div>
 
-            <div className="min-h-0 overflow-y-auto bg-[#fbf8f2] p-3">
+            <div className={`min-h-0 overflow-y-auto ${structuredAccent.body} p-3`}>
               {creditBlocked && (
-                <div className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-                  <p className="font-semibold">���ֲ��㣬��ʱ���ܼ�������</p>
-                  <button type="button" onClick={onOpenCredits} className="mt-2 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600">ȥ��������</button>
+                <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                  <p className="font-black">积分不足，暂时不能继续提问</p>
+                  <button type="button" onClick={onOpenCredits} className="mt-2 rounded-lg bg-red-700 px-3 py-1.5 text-xs font-black text-white hover:bg-red-600">去积分中心</button>
                 </div>
               )}
-              {messagesLoading && <div className="py-16 text-center text-sm text-stone-400">������...</div>}
-              {messagesError && <div className="rounded border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">��Ϣ����ʧ�ܣ��뷵�����ԡ�</div>}
+              {messagesLoading && <div className="py-16 text-center text-sm text-stone-400">加载中...</div>}
+              {messagesError && <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">消息加载失败，请返回重试。</div>}
               {!messagesLoading && !messagesError && messages.length === 0 && !sending && (
                 <div className="flex h-full min-h-[420px] flex-col">
-                  <div className="flex flex-1 items-center justify-center rounded border border-dashed border-black/10 bg-white/55 px-6 py-10">
+                  <div className={`flex flex-1 items-center justify-center rounded-2xl border border-dashed ${structuredAccent.taskBorder} bg-white/65 px-6 py-10`}>
                     <div className="max-w-md text-center">
-                      <p className="text-[13px] font-semibold text-stone-500">�������հ�</p>
+                      <p className="text-[13px] font-semibold text-stone-500">工作区空白</p>
                       <p className="mt-2 text-xs leading-6 text-stone-400">{structuredEmptyHint}</p>
                       <div className="mt-5 flex flex-wrap justify-center gap-2">
                         {structuredQuestions.map(question => (
-                          <button key={question} type="button" onClick={() => sendText(question)} className="rounded border border-black/10 bg-white/80 px-3 py-1.5 text-[11px] font-semibold text-stone-500 transition hover:border-black/10 hover:text-stone-700">
+                          <button key={question} type="button" onClick={() => sendText(question)} className={`rounded-full border ${structuredAccent.taskBorder} bg-white/80 px-3 py-1.5 text-[11px] font-semibold text-stone-500 transition ${structuredAccent.hover}`}>
                             {question}
                           </button>
                         ))}
                       </div>
-                      <button onClick={() => sendText(structuredWorkflow.prompt)} disabled={sending} className="mt-4 rounded bg-[#2f251d] px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">
+                      <button onClick={() => sendText(structuredWorkflow.prompt)} disabled={sending} className={`mt-4 rounded-full px-4 py-2 text-xs font-semibold text-white shadow-sm disabled:opacity-40 ${structuredAccent.primary}`}>
                         {structuredWorkflow.button}
                       </button>
                     </div>
@@ -2317,16 +2824,16 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
                 const isUser = msg.role === 'user';
                 return (
                   <div key={msg.id} className={`mb-4 flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[88%] rounded px-3.5 py-2.5 text-[13px] leading-6 ${isUser ? 'rounded-br-sm bg-[#2f251d] text-white' : 'rounded-bl-sm border border-black/10 bg-white text-stone-800'}`}>
+                    <div className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-6 shadow-sm ${isUser ? `rounded-br-sm ${structuredAccent.primary.split(' ')[0]} text-white` : `rounded-bl-sm border ${structuredAccent.taskBorder} bg-white text-stone-800`}`}>
                       <MessageText content={msg.content} dark={isUser} />
                       <AttachmentList attachments={msg.attachments} dark={isUser} />
                       {!isUser && (
                         <div className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3">
-                          <button onClick={() => { navigator.clipboard.writeText(msg.content); showToast('�Ѹ���', 'info'); }} className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:bg-white">
-                            ����
+                          <button onClick={() => { navigator.clipboard.writeText(msg.content); showToast('已复制', 'info'); }} className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-black text-stone-600 transition hover:bg-white">
+                            复制
                           </button>
-                          <button onClick={() => downloadWordDocument(conversationTitle || structuredWorkflow.title || 'AI �ش�', msg.content)} className="rounded-lg border border-black/10 bg-[#fbf6ee] px-3 py-1.5 text-xs font-semibold text-[#7a4c2c] transition hover:bg-white">
-                            ���� Word
+                          <button onClick={() => downloadWordDocument(conversationTitle || structuredWorkflow.title || 'AI 回答', msg.content)} className={`rounded-lg border ${structuredAccent.taskBorder} ${structuredAccent.soft} px-3 py-1.5 text-xs font-black ${structuredAccent.ink} transition hover:bg-white`}>
+                            下载 Word
                           </button>
                         </div>
                       )}
@@ -2337,9 +2844,9 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
 
               {streamingContent && (
                 <div className="mb-4 flex justify-start">
-                  <div className="max-w-[88%] rounded rounded-bl-sm border border-black/10 bg-white px-3.5 py-2.5 text-[13px] leading-6 text-stone-800">
+                  <div className={`max-w-[88%] rounded-2xl rounded-bl-sm border ${structuredAccent.taskBorder} bg-white px-3.5 py-2.5 text-[13px] leading-6 text-stone-800 shadow-sm`}>
                     <MessageText content={streamingContent} />
-                    <span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-[#8a5a35] align-middle" />
+                    <span className={`ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm align-middle ${isQingheXiezuo ? 'bg-[#245f55]' : 'bg-[#8a5a35]'}`} />
                   </div>
                 </div>
               )}
@@ -2349,7 +2856,7 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
             <div className="border-t border-stone-200 bg-white p-2.5">
               <input ref={fileInputRef} type="file" multiple accept=".pdf,.txt,.md,.doc,.docx" onChange={event => chooseFiles(event.target.files)} className="hidden" />
               <div className="flex gap-2">
-                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="grid h-10 w-10 shrink-0 place-items-center rounded border border-stone-300 bg-white text-lg text-stone-700 transition hover:border-[#8a5a35] hover:text-[#8a5a35] disabled:opacity-40" title="�ϴ�����">
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-stone-300 bg-white text-lg text-stone-700 shadow-sm transition hover:text-current disabled:opacity-40 ${isQingheXiezuo ? 'hover:border-[#245f55] hover:text-[#245f55]' : 'hover:border-[#8a5a35] hover:text-[#8a5a35]'}`} title="上传附件">
                   +
                 </button>
                 <input
@@ -2358,64 +2865,64 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
                   value={input}
                   onChange={event => setInput(event.target.value)}
                   onKeyDown={event => event.key === 'Enter' && sendText(input)}
-                  placeholder={sending ? '�ȴ� AI �ظ���...' : '����Ҫ��Ҳ����ֻ������'}
-                  className="min-w-0 flex-1 rounded border border-stone-300 bg-white px-3 py-2 text-[13px] text-stone-900 outline-none placeholder:text-stone-400 focus:border-[#8a5a35] focus:ring-1 focus:ring-[#8a5a35]/20"
+                  placeholder={sending ? '等待 AI 回复中...' : '补充要求，也可以只发附件'}
+                  className={`min-w-0 flex-1 rounded-xl border border-stone-300 bg-white px-3 py-2 text-[13px] text-stone-900 outline-none placeholder:text-stone-400 ${isQingheXiezuo ? 'focus:border-[#245f55] focus:ring-1 focus:ring-[#245f55]/20' : 'focus:border-[#8a5a35] focus:ring-1 focus:ring-[#8a5a35]/20'}`}
                 />
-                <button onClick={() => sendText(structuredWorkflow.prompt)} disabled={sending} className="shrink-0 rounded bg-[#2f251d] px-4 py-2 text-[13px] font-semibold text-white transition hover:bg-[#4a3728] disabled:opacity-40">
+                <button onClick={() => sendText(structuredWorkflow.prompt)} disabled={sending} className={`shrink-0 rounded-xl px-4 py-2 text-[13px] font-semibold text-white shadow transition disabled:opacity-40 ${structuredAccent.primary}`}>
                   {structuredWorkflow.button}
                 </button>
-                <button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="grid h-10 w-10 shrink-0 place-items-center rounded bg-stone-900 text-white transition hover:bg-stone-800 disabled:opacity-40" title="���Ͳ���">
-                  ��
+                <button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-stone-900 text-white shadow transition hover:bg-stone-800 disabled:opacity-40" title="发送补充">
+                  →
                 </button>
               </div>
             </div>
           </section>
 
-          <aside className={`min-h-0 overflow-hidden rounded-md border border-stone-200/80 bg-white/86 transition-all ${teacherLibraryOpen ? 'opacity-100' : 'opacity-100'}`}>
+          <aside className={`min-h-0 overflow-hidden rounded-[22px] border ${structuredAccent.panel} shadow-[0_14px_36px_rgba(80,64,42,0.06)] transition-all ${teacherLibraryOpen ? 'opacity-100' : 'opacity-100'}`}>
             {teacherLibraryOpen ? (
               <div className="flex h-full min-h-0 flex-col">
                 <div className="flex items-center justify-between border-b border-stone-200/80 p-3">
                   <div>
-                    <p className="text-[13px] font-semibold text-stone-950">���Ͽ�</p>
-                    <p className="text-xs text-stone-500">��ҵ�񳡾���ʱ����</p>
+                    <p className="text-[13px] font-semibold text-stone-950">{isQingheXiezuo ? '材料与要求' : '材料库'}</p>
+                    <p className="text-xs text-stone-500">{isQingheXiezuo ? '作文题、原文、教案和交付要求' : '按业务场景随时收起'}</p>
                   </div>
-                  <button type="button" onClick={() => setTeacherLibraryOpen(false)} className="rounded border border-black/10 bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-600">����</button>
+                  <button type="button" onClick={() => setTeacherLibraryOpen(false)} className={`rounded-full border ${structuredAccent.taskBorder} bg-white px-2.5 py-1 text-[11px] font-semibold text-stone-600`}>收起</button>
                 </div>
                 <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-3">
-                  <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full rounded border border-dashed border-black/10 bg-white px-3 py-3 text-left transition hover:bg-white">
-                    <span className="block text-[13px] font-semibold text-stone-950">��Ӳ���</span>
-                    <span className="mt-1 block text-xs leading-5 text-stone-500">{isSongyueShici ? 'ʫ��ԭ�ġ�ע�͡����塢���顢����Ҫ��' : isYunqiaoJiaoxue ? '���ġ���Ԫ����κ��⡢�̰�������' : '���ġ��̰������塢˵�θ塢�زİ�'}</span>
+                  <button type="button" onClick={() => fileInputRef.current?.click()} className={`w-full rounded-2xl border border-dashed ${isQingheXiezuo ? 'border-[#b9d7ce]' : 'border-[#d8c5aa]'} bg-white px-3 py-3 text-left transition ${structuredAccent.hover}`}>
+                    <span className="block text-[13px] font-semibold text-stone-950">添加材料</span>
+                    <span className="mt-1 block text-xs leading-5 text-stone-500">{isSongyueShici ? '诗词原文、注释、讲稿、板书、课堂要求' : isYunqiaoJiaoxue ? '课文、单元导语、课后题、教案、活动设计' : '作文、教案、讲义、说课稿、素材包'}</span>
                   </button>
-                  <div className="rounded border border-black/10 bg-white p-3">
-                    <p className="text-xs font-semibold text-[#8a5a35]">���β���</p>
-                    <p className="mt-2 text-xs leading-5 text-stone-600">{workbench.material ? '����д�������ݣ����ͺ���Ϊ�������ݡ�' : '��û��ճ�����ϣ���ֱ���ϴ��ļ������·����롣'}</p>
+                  <div className={`rounded-2xl border ${structuredAccent.taskBorder} bg-white p-3`}>
+                    <p className={`text-xs font-semibold ${structuredAccent.ink}`}>本次材料</p>
+                    <p className="mt-2 text-xs leading-5 text-stone-600">{workbench.material ? '已填写材料内容，发送后将作为核心依据。' : '还没有粘贴材料，可直接上传文件或在下方输入。'}</p>
                   </div>
-                  <label className="block rounded border border-black/10 bg-white p-3">
+                  <label className={`block rounded-2xl border ${structuredAccent.taskBorder} bg-white p-3`}>
                     <span className="mb-2 block text-xs font-semibold text-stone-700">{structuredWorkflow.materialLabel}</span>
                     <textarea
                       value={workbench.material}
                       onChange={event => updateWorkbenchValue('material', event.target.value)}
                       placeholder={structuredWorkflow.materialPlaceholder}
                       rows={5}
-                      className="w-full resize-none rounded border border-black/10 bg-white px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]"
+                      className={`w-full resize-none rounded-xl border ${structuredAccent.taskBorder} ${structuredAccent.soft} px-3 py-2 text-xs leading-5 text-stone-800 outline-none placeholder:text-stone-400 ${structuredAccent.focus}`}
                     />
                   </label>
-                  <label className="block rounded border border-black/10 bg-white p-3">
+                  <label className={`block rounded-2xl border ${structuredAccent.taskBorder} bg-white p-3`}>
                     <span className="mb-2 block text-xs font-semibold text-stone-700">{structuredWorkflow.directionLabel}</span>
-                    <input value={workbench.goal} onChange={event => updateWorkbenchValue('goal', event.target.value)} placeholder={structuredWorkflow.directionPlaceholder} className="h-9 w-full rounded border border-black/10 bg-white px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" />
+                    <input value={workbench.goal} onChange={event => updateWorkbenchValue('goal', event.target.value)} placeholder={structuredWorkflow.directionPlaceholder} className={`h-9 w-full rounded-xl border ${structuredAccent.taskBorder} ${structuredAccent.soft} px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 ${structuredAccent.focus}`} />
                   </label>
-                  <label className="block rounded border border-black/10 bg-white p-3">
+                  <label className={`block rounded-2xl border ${structuredAccent.taskBorder} bg-white p-3`}>
                     <span className="mb-2 block text-xs font-semibold text-stone-700">{structuredWorkflow.outputLabel}</span>
-                    <input value={workbench.output} onChange={event => updateWorkbenchValue('output', event.target.value)} placeholder={structuredWorkflow.outputPlaceholder} className="h-9 w-full rounded border border-black/10 bg-white px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]" />
+                    <input value={workbench.output} onChange={event => updateWorkbenchValue('output', event.target.value)} placeholder={structuredWorkflow.outputPlaceholder} className={`h-9 w-full rounded-xl border ${structuredAccent.taskBorder} ${structuredAccent.soft} px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 ${structuredAccent.focus}`} />
                   </label>
                   {pendingFiles.length > 0 && (
-                    <div className="rounded border border-black/10 bg-white p-4">
-                      <p className="mb-2 text-xs font-semibold text-stone-700">�����͸���</p>
+                    <div className={`rounded-2xl border ${structuredAccent.taskBorder} bg-white p-4`}>
+                      <p className="mb-2 text-xs font-black text-stone-700">待发送附件</p>
                       <div className="grid gap-2">
                         {pendingFiles.map((file, index) => (
-                          <div key={`${file.name}-${index}`} className="flex items-center gap-2 rounded bg-[#fbf6ee] px-3 py-2 text-xs text-stone-700">
+                          <div key={`${file.name}-${index}`} className={`flex items-center gap-2 rounded-xl ${structuredAccent.soft} px-3 py-2 text-xs text-stone-700`}>
                             <span className="min-w-0 flex-1 truncate font-semibold">{file.name}</span>
-                            <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="�Ƴ�">x</button>
+                            <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="移除">x</button>
                           </div>
                         ))}
                       </div>
@@ -2424,8 +2931,8 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
                 </div>
               </div>
             ) : (
-              <button type="button" onClick={() => setTeacherLibraryOpen(true)} className="flex h-full w-full items-center justify-center bg-white text-xs font-semibold text-stone-600 [writing-mode:vertical-rl]">
-                չ�����Ͽ�
+              <button type="button" onClick={() => setTeacherLibraryOpen(true)} className={`flex h-full w-full items-center justify-center ${structuredAccent.soft} text-xs font-black text-stone-600 [writing-mode:vertical-rl]`}>
+                {isQingheXiezuo ? '展开材料' : '展开材料库'}
               </button>
             )}
           </aside>
@@ -2435,93 +2942,67 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
   }
 
   return (
-    <div className="flex h-screen flex-col bg-[var(--bg)]">
-      <header className="sticky top-0 z-10 border-b border-[#2f251d]/10 bg-[var(--bg)]/90 px-4 py-3 backdrop-blur">
+    <div className="flex h-screen flex-col bg-[#f7f2e8]">
+      <header className="sticky top-0 z-10 border-b border-emerald-900/10 bg-[#f7f2e8]/90 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center gap-3">
-          <button onClick={onBack} className="flex h-9 w-9 items-center justify-center rounded border border-stone-300 bg-white/70 text-stone-600 transition hover:border-stone-500" title="����">
-            ��
+          <button onClick={onBack} className="flex h-9 w-9 items-center justify-center rounded-full border border-stone-300 bg-white/70 text-stone-600 transition hover:border-stone-500" title="返回">
+            ←
           </button>
-          <button onClick={onOpenHome} className="rounded border border-stone-200 bg-white/70 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:border-[#2f251d]/40 hover:text-[#2f251d]">
-            ��ҳ
+          <button onClick={onOpenHome} className="rounded-full border border-stone-200 bg-white/70 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:border-emerald-300 hover:text-emerald-800">
+            首页
           </button>
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-base font-semibold text-stone-950">{displayExpertName || meta.alias}</h1>
+            <h1 className="truncate text-base font-black text-emerald-950">{displayExpertName || meta.alias}</h1>
             <p className="truncate text-xs text-stone-500">{conversationTitle || meta.title}</p>
           </div>
         </div>
       </header>
 
-      <div className={isQingheWriting ? 'flex-1 overflow-hidden px-4 py-5' : 'flex-1 overflow-y-auto px-4 py-5'}>
+      <div className={isQingheXiezuo ? 'flex-1 overflow-hidden px-4 py-5' : 'flex-1 overflow-y-auto px-4 py-5'}>
         <div className="mx-auto grid max-w-5xl gap-4 lg:grid-cols-[320px_1fr]">
           <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-            <div className={`rounded-md border border-stone-200 ${meta.soft} p-4`}>
+            <div className={`rounded-3xl border border-stone-200 ${meta.soft} p-4 shadow-sm`}>
               <div className="flex items-center gap-3">
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-white">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-3xl bg-white shadow-sm">
                   <img src={meta.avatar} alt={meta.alias} className="h-full w-full object-cover" onError={event => { event.currentTarget.style.display = 'none'; }} />
                 </div>
                 <div>
-                  <p className="text-lg font-semibold text-stone-950">{meta.alias}</p>
+                  <p className="text-lg font-black text-stone-950">{meta.alias}</p>
                   <p className="text-xs text-stone-500">{meta.title}</p>
                 </div>
               </div>
               <p className="mt-3 text-sm leading-6 text-stone-700">{meta.promise}</p>
             </div>
 
-            <div className={`rounded-md border bg-white/85 p-4 ${isMindfulness ? 'border-black/10' : 'border-stone-200'}`}>
-              <h2 className="text-base font-semibold text-stone-900">{isQingheWriting ? '����������' : workbenchCopy.title}</h2>
-              <p className="mt-1 text-xs leading-5 text-stone-500">{isQingheWriting ? '�����ÿ�ζ���Ӱ��д���жϵı����������Ʒ���Ҳ๤�������·��ʴ𲹳䡣' : workbenchCopy.intro}</p>
-              {isQingheWriting && (
+            <div className={`rounded-3xl border bg-white/85 p-4 shadow-sm ${isMindfulness ? 'border-indigo-100' : 'border-stone-200'}`}>
+              <h2 className="text-base font-black text-stone-900">{isQingheXiezuo ? '公共资料区' : workbenchCopy.title}</h2>
+              <p className="mt-1 text-xs leading-5 text-stone-500">{isQingheXiezuo ? '这里放每次都会影响青禾老师判断的背景。具体成品靠右侧工作流和下方问答补充。' : workbenchCopy.intro}</p>
+              {isQingheXiezuo && (
                 <div className="mt-3 grid gap-2 text-xs leading-5">
-                  <div className="rounded border border-black/10 bg-[#faf8f4] px-3 py-2 text-[#2f251d]">
-                    <p className="font-semibold">���Ϻͳ�Ʒ����</p>
-                    <p>�ϴ����ġ��زġ��̰������塢˵�θ����ʦ�Լ������ϼ��ɿ�ʼ��</p>
-                    <p>�����ɺ��ֱ������ Word��</p>
+                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-emerald-900">
+                    <p className="font-black">资料和成品优先</p>
+                    <p>上传作文、素材、教案、讲义、说课稿或老师自己的资料即可开始。</p>
+                    <p>答案生成后可直接下载 Word。</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="rounded border border-stone-200 bg-white px-3 py-2 text-left text-stone-800 transition hover:border-[#2f251d]/40 hover:bg-[#faf8f4]"
+                    className="rounded-2xl border border-stone-200 bg-white px-3 py-2 text-left text-stone-800 transition hover:border-emerald-300 hover:bg-emerald-50"
                   >
-                    <span className="block font-semibold">�ϴ�����</span>
-                    <span>֧�� Word��PDF��TXT��Markdown�����������ϲ��㲢�ĸ塣</span>
+                    <span className="block font-black">上传资料</span>
+                    <span>支持 Word、PDF、TXT、Markdown。可让青禾老师诊断不足并改稿。</span>
                   </button>
                 </div>
               )}
               <div className="mt-4 space-y-3">
-                {(isQingheWriting ? workbenchCopy.fields.filter(field => ['grade', 'region', 'textbook', 'studentLevel'].includes(field.key)) : workbenchCopy.fields).map(field => (
+                {(isQingheXiezuo ? workbenchCopy.fields.filter(field => ['grade', 'region', 'textbook', 'studentLevel'].includes(field.key)) : workbenchCopy.fields).map(field => (
                   <label key={field.key} className="block">
-                    <span className="mb-1.5 block text-xs font-semibold text-stone-700">{field.label}����ѡ��</span>
-                    {field.options && (field.control === 'chips' || field.control === 'multi') ? (
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap gap-1.5">
-                          {field.options.map(option => {
-                            const selected = field.control === 'multi'
-                              ? workbench[field.key].split('��').map(item => item.trim()).filter(Boolean).includes(option)
-                              : workbench[field.key] === option;
-                            return (
-                              <button
-                                key={option}
-                                type="button"
-                                onClick={() => updateWorkbenchValue(field.key, field.control === 'multi' ? toggleMultiValue(workbench[field.key], option) : option)}
-                                className={`rounded border px-2.5 py-1.5 text-[11px] font-semibold transition ${selected ? 'border-[#2f251d] bg-[#2f251d] text-white' : 'border-black/10 bg-white text-stone-600 hover:border-[#8a5a35] hover:text-[#2f251d]'}`}
-                              >
-                                {option}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <input
-                          value={workbench[field.key]}
-                          onChange={event => updateWorkbenchValue(field.key, event.target.value)}
-                          placeholder={field.placeholder}
-                          className="h-9 w-full rounded border border-stone-200 bg-white px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]"
-                        />
-                      </div>
-                    ) : field.options ? (
+                    <span className="mb-1.5 block text-xs font-black text-stone-700">{field.label}（可选）</span>
+                    {field.options ? (
                       <select
                         value={workbench[field.key]}
                         onChange={event => updateWorkbenchValue(field.key, event.target.value)}
-                        className={`h-9 w-full rounded border bg-white px-3 text-xs text-stone-800 outline-none ${isMindfulness ? 'border-black/10 focus:border-[#8a5a35]' : 'border-stone-200 focus:border-[#8a5a35]'}`}
+                        className={`h-9 w-full rounded-xl border bg-white px-3 text-xs text-stone-800 outline-none ${isMindfulness ? 'border-indigo-100 focus:border-indigo-500' : 'border-stone-200 focus:border-emerald-700'}`}
                       >
                         <option value="">{field.placeholder}</option>
                         {field.options.map(option => <option key={option} value={option}>{option}</option>)}
@@ -2531,7 +3012,7 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
                         value={workbench[field.key]}
                         onChange={event => updateWorkbenchValue(field.key, event.target.value)}
                         placeholder={field.placeholder}
-                        className={`h-9 w-full rounded border bg-white px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 ${isMindfulness ? 'border-black/10 focus:border-[#8a5a35]' : 'border-stone-200 focus:border-[#8a5a35]'}`}
+                        className={`h-9 w-full rounded-xl border bg-white px-3 text-xs text-stone-800 outline-none placeholder:text-stone-400 ${isMindfulness ? 'border-indigo-100 focus:border-indigo-500' : 'border-stone-200 focus:border-emerald-700'}`}
                       />
                     ) : (
                       <textarea
@@ -2539,13 +3020,13 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
                         onChange={event => updateWorkbenchValue(field.key, event.target.value)}
                         placeholder={field.placeholder}
                         rows={field.rows || 3}
-                        className={`w-full rounded border bg-white px-3 py-2 text-xs text-stone-800 outline-none placeholder:text-stone-400 ${isMindfulness ? 'border-black/10 focus:border-[#8a5a35]' : 'border-stone-200 focus:border-[#8a5a35]'}`}
+                        className={`w-full rounded-xl border bg-white px-3 py-2 text-xs text-stone-800 outline-none placeholder:text-stone-400 ${isMindfulness ? 'border-indigo-100 focus:border-indigo-500' : 'border-stone-200 focus:border-emerald-700'}`}
                       />
                     )}
                   </label>
                 ))}
-                {!isQingheWriting && (
-                  <button onClick={() => sendText(workbenchCopy.prompt)} disabled={sending} className={`w-full rounded px-4 py-3 text-sm font-semibold text-white transition disabled:opacity-50 ${isMindfulness ? 'bg-[#2f251d] hover:bg-[#4a3728]' : 'bg-[#2f251d] hover:bg-[#4a3728]'}`}>
+                {!isQingheXiezuo && (
+                  <button onClick={() => sendText(workbenchCopy.prompt)} disabled={sending} className={`w-full rounded-2xl px-4 py-3 text-sm font-black text-white shadow-sm transition disabled:opacity-50 ${isMindfulness ? 'bg-indigo-700 hover:bg-indigo-600' : 'bg-emerald-900 hover:bg-emerald-800'}`}>
                     {workbenchCopy.button}
                   </button>
                 )}
@@ -2553,8 +3034,8 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
             </div>
           </aside>
 
-          <section className={isQingheWriting ? 'flex h-[calc(100vh-104px)] min-h-0 flex-col overflow-hidden rounded border border-stone-200 bg-white/85' : 'space-y-4'}>
-            {isQingheWriting && (
+          <section className={isQingheXiezuo ? 'flex h-[calc(100vh-104px)] min-h-0 flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white/85 shadow-sm' : 'space-y-4'}>
+            {isQingheXiezuo && (
               <div className="shrink-0 border-b border-stone-200 p-4">
                 <div className="flex flex-wrap gap-2">
                   {TEACHER_BOARDS.map(board => (
@@ -2562,9 +3043,9 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
                       key={board.id}
                       type="button"
                       onClick={() => switchTeacherBoard(board.id)}
-                      className={`rounded border px-3 py-2 text-left transition ${activeTeacherBoard === board.id ? 'border-[#2f251d] bg-[#2f251d] text-white' : 'border-stone-200 bg-stone-50 text-stone-700 hover:border-[#2f251d]/40'}`}
+                      className={`rounded-xl border px-3 py-2 text-left transition ${activeTeacherBoard === board.id ? 'border-emerald-900 bg-emerald-900 text-white' : 'border-stone-200 bg-stone-50 text-stone-700 hover:border-emerald-300'}`}
                     >
-                      <span className="block text-sm font-semibold">{board.label}</span>
+                      <span className="block text-sm font-black">{board.label}</span>
                       <span className={`block text-[11px] ${activeTeacherBoard === board.id ? 'text-white/70' : 'text-stone-500'}`}>{board.hint}</span>
                     </button>
                   ))}
@@ -2578,9 +3059,9 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
                         key={workflowId}
                         type="button"
                         onClick={() => setActiveTeacherWorkflow(workflowId)}
-                        className={`rounded border px-3 py-2 text-left text-sm transition ${activeTeacherWorkflow === workflowId ? 'border-stone-800 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-700 hover:border-stone-400'}`}
+                        className={`rounded-xl border px-3 py-2 text-left text-sm transition ${activeTeacherWorkflow === workflowId ? 'border-stone-800 bg-stone-900 text-white' : 'border-stone-200 bg-white text-stone-700 hover:border-stone-400'}`}
                       >
-                        <span className="font-semibold">{workflow.label}</span>
+                        <span className="font-black">{workflow.label}</span>
                         <span className={`mt-1 block text-xs leading-5 ${activeTeacherWorkflow === workflowId ? 'text-white/70' : 'text-stone-500'}`}>{workflow.title}</span>
                       </button>
                     );
@@ -2589,47 +3070,47 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
 
                 <div className="mt-4 grid gap-3">
                   <label className="block">
-                    <span className="mb-1.5 block text-xs font-semibold text-stone-700">{teacherWorkflow.materialLabel}</span>
+                    <span className="mb-1.5 block text-xs font-black text-stone-700">{teacherWorkflow.materialLabel}</span>
                     <textarea
                       value={workbench.material}
                       onChange={event => updateWorkbenchValue('material', event.target.value)}
                       placeholder={teacherWorkflow.materialPlaceholder}
                       rows={4}
-                      className="w-full rounded border border-stone-200 bg-white px-3 py-2 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]"
+                      className="w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-emerald-700"
                     />
                   </label>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block">
-                      <span className="mb-1.5 block text-xs font-semibold text-stone-700">{teacherWorkflow.directionLabel}</span>
+                      <span className="mb-1.5 block text-xs font-black text-stone-700">{teacherWorkflow.directionLabel}</span>
                       <input
                         value={workbench.goal}
                         onChange={event => updateWorkbenchValue('goal', event.target.value)}
                         placeholder={teacherWorkflow.directionPlaceholder}
-                        className="h-10 w-full rounded border border-stone-200 bg-white px-3 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]"
+                        className="h-10 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-emerald-700"
                       />
                     </label>
                     <label className="block">
-                      <span className="mb-1.5 block text-xs font-semibold text-stone-700">{teacherWorkflow.outputLabel}</span>
+                      <span className="mb-1.5 block text-xs font-black text-stone-700">{teacherWorkflow.outputLabel}</span>
                       <input
                         value={workbench.output}
                         onChange={event => updateWorkbenchValue('output', event.target.value)}
                         placeholder={teacherWorkflow.outputPlaceholder}
-                        className="h-10 w-full rounded border border-stone-200 bg-white px-3 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-[#8a5a35]"
+                        className="h-10 w-full rounded-xl border border-stone-200 bg-white px-3 text-sm text-stone-800 outline-none placeholder:text-stone-400 focus:border-emerald-700"
                       />
                     </label>
                   </div>
                 </div>
               </div>
             )}
-            <div className={isQingheWriting ? 'min-h-0 flex-1 space-y-4 overflow-y-auto p-4' : 'space-y-4'}>
-            {messagesLoading && <div className="py-12 text-center text-sm text-stone-400">������...</div>}
-            {messagesError && <div className="rounded border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">��Ϣ����ʧ�ܣ��뷵�����ԡ�</div>}
+            <div className={isQingheXiezuo ? 'min-h-0 flex-1 space-y-4 overflow-y-auto p-4' : 'space-y-4'}>
+            {messagesLoading && <div className="py-12 text-center text-sm text-stone-400">加载中...</div>}
+            {messagesError && <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">消息加载失败，请返回重试。</div>}
             {!messagesLoading && !messagesError && messages.length === 0 && !sending && (
-              <div className="rounded-md border border-stone-200 bg-white/85 p-5">
-                <h3 className="text-lg font-semibold text-stone-900">{isQingheWriting ? '��˵Ҫ����ʲô�����ϴ�������������' : isMindfulness ? '��������һ����С�İ���' : '����ֱ���ʣ�Ҳ�������ϴ�����'}</h3>
+              <div className="rounded-3xl border border-stone-200 bg-white/85 p-5 shadow-sm">
+                <h3 className="text-lg font-black text-stone-900">{isQingheXiezuo ? '先说要交付什么，或上传资料让青禾老师诊改' : isMindfulness ? '可以先做一个很小的安顿' : '可以直接问，也可以先上传材料'}</h3>
                 <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                  {(isQingheWriting ? QINGHE_WRITING_QUESTIONS : isSongyueShici ? SONGYUE_SHICI_QUESTIONS : isBingshan ? BINGSHAN_QUESTIONS : isMindfulness ? MINDFULNESS_QUESTIONS : QUICK_QUESTIONS).map(question => (
-                    <button key={question} type="button" onClick={() => sendText(question)} className="rounded border border-stone-200 bg-stone-50 px-3 py-3 text-left text-sm font-semibold leading-5 text-stone-700 transition hover:border-[#8a5a35] hover:bg-white hover:text-[#2f251d]">
+                  {(isQingheXiezuo ? QINGHE_WRITING_QUESTIONS : isSongyueShici ? SONGYUE_SHICI_QUESTIONS : isMindfulness ? MINDFULNESS_QUESTIONS : QUICK_QUESTIONS).map(question => (
+                    <button key={question} type="button" onClick={() => sendText(question)} className="rounded-2xl border border-stone-200 bg-stone-50 px-3 py-3 text-left text-sm font-semibold leading-5 text-stone-700 transition hover:border-emerald-700 hover:bg-white hover:text-emerald-800">
                       {question}
                     </button>
                   ))}
@@ -2641,16 +3122,16 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
               const isUser = msg.role === 'user';
               return (
                 <div key={msg.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`group relative max-w-[86%] rounded-md px-4 py-3 text-sm leading-6 ${isUser ? 'rounded-tr-sm bg-[#2f251d] text-white' : 'rounded-tl-sm border border-stone-200 bg-white text-stone-800'}`}>
+                  <div className={`group relative max-w-[86%] rounded-3xl px-4 py-3 text-sm leading-6 shadow-sm ${isUser ? 'rounded-tr-sm bg-emerald-900 text-white' : 'rounded-tl-sm border border-stone-200 bg-white text-stone-800'}`}>
                     <MessageText content={msg.content} dark={isUser} />
                     <AttachmentList attachments={msg.attachments} dark={isUser} />
                     {!isUser && (
                       <div className="mt-3 flex flex-wrap gap-2 border-t border-stone-100 pt-3">
-                        <button onClick={() => { navigator.clipboard.writeText(msg.content); showToast('�Ѹ���', 'info'); }} className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-semibold text-stone-600 transition hover:bg-white" title="����">
-                          ����
+                        <button onClick={() => { navigator.clipboard.writeText(msg.content); showToast('已复制', 'info'); }} className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs font-black text-stone-600 transition hover:bg-white" title="复制">
+                          复制
                         </button>
-                        <button onClick={() => downloadWordDocument(conversationTitle || teacherWorkflow.title || 'AI �ش�', msg.content)} className="rounded-lg border border-black/10 bg-[#faf8f4] px-3 py-1.5 text-xs font-semibold text-[#2f251d] transition hover:bg-white" title="���� Word">
-                          ���� Word
+                        <button onClick={() => downloadWordDocument(conversationTitle || teacherWorkflow.title || 'AI 回答', msg.content)} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-black text-emerald-800 transition hover:bg-white" title="下载 Word">
+                          下载 Word
                         </button>
                       </div>
                     )}
@@ -2661,29 +3142,29 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
 
             {streamingContent && (
               <div className="flex justify-start">
-                <div className="max-w-[86%] rounded-md rounded-tl-sm border border-stone-200 bg-white px-4 py-3 text-sm leading-6 text-stone-800">
+                <div className="max-w-[86%] rounded-3xl rounded-tl-sm border border-stone-200 bg-white px-4 py-3 text-sm leading-6 text-stone-800 shadow-sm">
                   <MessageText content={streamingContent} />
-                  <span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-[#4a3728] align-middle" />
+                  <span className="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-emerald-700 align-middle" />
                 </div>
               </div>
             )}
             <div ref={bottomRef} />
             </div>
-            {isQingheWriting && (
+            {isQingheXiezuo && (
               <div className="shrink-0 border-t border-stone-200 bg-[#fbfaf7] p-3">
                 {pendingFiles.length > 0 && (
                   <div className="mb-2 flex flex-wrap gap-2">
                     {pendingFiles.map((file, index) => (
                       <div key={`${file.name}-${index}`} className="flex max-w-full items-center gap-2 rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs text-stone-700">
                         <span className="max-w-48 truncate font-semibold">{file.name}</span>
-                        <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="�Ƴ�">x</button>
+                        <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="移除">x</button>
                       </div>
                     ))}
                   </div>
                 )}
                 <div className="flex gap-2">
                   <input ref={fileInputRef} type="file" multiple accept=".pdf,.txt,.md,.doc,.docx" onChange={event => chooseFiles(event.target.files)} className="hidden" />
-                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-stone-300 bg-white text-xl text-stone-700 transition hover:border-[#8a5a35] hover:text-[#2f251d] disabled:opacity-40" title="�ϴ�����">
+                  <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-stone-300 bg-white text-xl text-stone-700 shadow-sm transition hover:border-emerald-700 hover:text-emerald-800 disabled:opacity-40" title="上传附件">
                     +
                   </button>
                   <input
@@ -2692,14 +3173,14 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
                     value={input}
                     onChange={event => setInput(event.target.value)}
                     onKeyDown={event => event.key === 'Enter' && sendText(input)}
-                    placeholder={sending ? '�ȴ� AI �ظ���...' : '����Ҫ��Ҳ����ֻ������'}
-                    className="min-w-0 flex-1 rounded border border-stone-300 bg-white px-4 py-2.5 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-[#8a5a35] focus:ring-1 focus:ring-[#8a5a35]/20"
+                    placeholder={sending ? '等待 AI 回复中...' : '补充要求，也可以只发附件'}
+                    className="min-w-0 flex-1 rounded-xl border border-stone-300 bg-white px-4 py-2.5 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-emerald-700 focus:ring-1 focus:ring-emerald-700/20"
                   />
-                  <button onClick={() => sendText(teacherWorkflow.prompt)} disabled={sending} className="shrink-0 rounded bg-[#2f251d] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#4a3728] disabled:opacity-40">
+                  <button onClick={() => sendText(teacherWorkflow.prompt)} disabled={sending} className="shrink-0 rounded-xl bg-emerald-900 px-4 py-2.5 text-sm font-black text-white shadow transition hover:bg-emerald-800 disabled:opacity-40">
                     {teacherWorkflow.button}
                   </button>
-                  <button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded bg-stone-900 text-white transition hover:bg-stone-800 disabled:opacity-40" title="���Ͳ���">
-                    ��
+                  <button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-stone-900 text-white shadow transition hover:bg-stone-800 disabled:opacity-40" title="发送补充">
+                    →
                   </button>
                 </div>
               </div>
@@ -2708,30 +3189,30 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
         </div>
       </div>
 
-      {!isQingheWriting && (
-      <div className="border-t border-[#2f251d]/10 bg-[var(--bg)]/90 px-4 py-3 backdrop-blur">
+      {!isQingheXiezuo && (
+      <div className="border-t border-emerald-900/10 bg-[#f7f2e8]/90 px-4 py-3 backdrop-blur">
         <div className="mx-auto max-w-5xl">
           {creditBlocked && (
-            <div className="mb-3 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-              <p className="font-semibold">���ֲ��㣬��ʱ���ܼ�������</p>
-              <button type="button" onClick={onOpenCredits} className="mt-3 rounded bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-600">
-                ȥ��������
+            <div className="mb-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              <p className="font-black">积分不足，暂时不能继续提问</p>
+              <button type="button" onClick={onOpenCredits} className="mt-3 rounded-full bg-red-700 px-3 py-1.5 text-xs font-black text-white hover:bg-red-600">
+                去积分中心
               </button>
             </div>
           )}
           {pendingFiles.length > 0 && (
             <div className="mb-3 flex flex-wrap gap-2">
               {pendingFiles.map((file, index) => (
-                <div key={`${file.name}-${index}`} className="flex max-w-full items-center gap-2 rounded border border-stone-200 bg-white/85 px-3 py-2 text-xs text-stone-700">
+                <div key={`${file.name}-${index}`} className="flex max-w-full items-center gap-2 rounded-2xl border border-stone-200 bg-white/85 px-3 py-2 text-xs text-stone-700 shadow-sm">
                   <span className="max-w-48 truncate font-semibold">{file.name}</span>
-                  <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="�Ƴ�">x</button>
+                  <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, i) => i !== index))} className="text-stone-400 hover:text-red-600" title="移除">x</button>
                 </div>
               ))}
             </div>
           )}
           <div className="flex gap-2">
-            <input ref={fileInputRef} type="file" multiple accept={isQingheWriting ? '.pdf,.txt,.md,.doc,.docx' : 'image/*,.pdf,.txt,.md,.doc,.docx'} onChange={event => chooseFiles(event.target.files)} className="hidden" />
-            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded border border-stone-300 bg-white/80 text-stone-700 transition hover:border-[#8a5a35] hover:text-[#2f251d] disabled:opacity-40" title="�ϴ�����">
+            <input ref={fileInputRef} type="file" multiple accept={isQingheXiezuo ? '.pdf,.txt,.md,.doc,.docx' : 'image/*,.pdf,.txt,.md,.doc,.docx'} onChange={event => chooseFiles(event.target.files)} className="hidden" />
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-stone-300 bg-white/80 text-stone-700 shadow-sm transition hover:border-emerald-700 hover:text-emerald-800 disabled:opacity-40" title="上传附件">
               +
             </button>
             <input
@@ -2740,11 +3221,11 @@ export default function ChatPage({ token, conversationId, expertId, expertName, 
               value={input}
               onChange={event => setInput(event.target.value)}
               onKeyDown={event => event.key === 'Enter' && sendText(input)}
-              placeholder={sending ? '�ȴ� AI �ظ���...' : '�������⣬Ҳ����ֻ������'}
-              className="flex-1 rounded border border-stone-300 bg-white/80 px-4 py-2.5 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-[#8a5a35] focus:ring-1 focus:ring-[#8a5a35]/20"
+              placeholder={sending ? '等待 AI 回复中...' : '输入问题，也可以只发附件'}
+              className="flex-1 rounded-2xl border border-stone-300 bg-white/80 px-4 py-2.5 text-sm text-stone-900 outline-none placeholder:text-stone-400 focus:border-emerald-700 focus:ring-1 focus:ring-emerald-700/20"
             />
-            <button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-[#2f251d] text-white transition hover:bg-[#4a3728] disabled:opacity-40" title="����">
-              ��
+            <button onClick={() => sendText(input)} disabled={sending || (!input.trim() && pendingFiles.length === 0)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-900 text-white shadow transition hover:bg-emerald-800 disabled:opacity-40" title="发送">
+              →
             </button>
           </div>
         </div>

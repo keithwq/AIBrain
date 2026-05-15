@@ -128,9 +128,11 @@ export function buildAnranLaoshiMessage(
   sub: string,
   workbench: AnranLaoshiWorkbenchValues,
   userText: string,
-  _methodNote: string,
-  _outputFallback: string,
+  methodNote: string,
+  outputFallback: string,
 ): string {
+  void methodNote;
+  void outputFallback;
   const task = getAnranLaoshiTask(taskId);
   const subDef = task.subOptions?.find(item => item.id === sub);
   const copy = promptByTask[taskId];
@@ -155,9 +157,12 @@ export function buildAnranLaoshiMessage(
 }
 
 export function validateAnranLaoshiInput(
-  _taskId: AnranLaoshiTaskId,
-  _sub: string,
-  _workbench: AnranLaoshiWorkbenchValues,
+  taskId: AnranLaoshiTaskId,
+  sub: string,
+  workbench: AnranLaoshiWorkbenchValues,
 ): string | null {
+  void taskId;
+  void sub;
+  void workbench;
   return null;
 }

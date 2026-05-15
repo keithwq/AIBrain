@@ -23,3 +23,9 @@ Thumbs.db
 
 # Logs
 *.log
+*.err
+.tmp-*
+
+# Local tool state
+.cursor/
+.playwright-mcp/

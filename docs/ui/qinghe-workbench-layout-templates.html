@@ -1,0 +1,1445 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>青禾写作教学工作台</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232f2c27'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='34' fill='white' font-family='serif'%3E%E9%BC%8E%3C/text%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg: #f6f5f1;
+      --paper: #ffffff;
+      --ink: #26231f;
+      --muted: #756f66;
+      --subtle: #aaa49a;
+      --line: #ded9cf;
+      --line-strong: #c9c1b4;
+      --brown: #4b4035;
+      --brown-2: #2f2c27;
+      --gold: #b98234;
+      --green: #315f52;
+      --red: #b45c49;
+      --blue: #486a91;
+      --shadow: 0 18px 42px rgba(52, 44, 34, 0.10);
+      --radius: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      letter-spacing: 0;
+    }
+
+    button, input, select, textarea {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .page {
+      min-height: 100vh;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-bottom: 1px solid rgba(222, 217, 207, 0.9);
+      background: rgba(246, 245, 241, 0.92);
+      backdrop-filter: blur(16px);
+    }
+
+    .topbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      max-width: 1360px;
+      margin: 0 auto;
+      padding: 14px 24px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 230px;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 38px;
+      height: 38px;
+      place-items: center;
+      border: 1px solid var(--line-strong);
+      border-radius: var(--radius);
+      background: #fffdf8;
+      color: var(--brown);
+      font-weight: 800;
+    }
+
+    .brand-title {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .brand-sub {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .template-tabs {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      flex: 1;
+    }
+
+    .tab {
+      border: 1px solid transparent;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      transition: 0.18s ease;
+    }
+
+    .tab.active {
+      border-color: var(--line-strong);
+      background: var(--paper);
+      color: var(--ink);
+      box-shadow: 0 8px 18px rgba(64, 55, 44, 0.08);
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 230px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+
+    .shell {
+      max-width: 1360px;
+      margin: 0 auto;
+      padding: 22px 24px 32px;
+    }
+
+    .template {
+      display: none;
+    }
+
+    .template.active {
+      display: block;
+    }
+
+    .screen {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+    }
+
+    .screen-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      border-bottom: 1px solid var(--line);
+      padding: 14px 18px;
+      background: #fbfaf7;
+    }
+
+    .screen-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .back {
+      display: grid;
+      width: 32px;
+      height: 32px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--paper);
+      color: var(--brown);
+    }
+
+    .screen h1 {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.25;
+    }
+
+    .screen-head p {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .credit {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      padding: 7px 12px;
+      color: var(--brown);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+    }
+
+    .field span {
+      color: var(--brown);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .field small {
+      color: var(--subtle);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .control, .textarea, .select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      color: var(--ink);
+      outline: none;
+      padding: 10px 11px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .textarea {
+      min-height: 116px;
+      resize: vertical;
+    }
+
+    .control:focus, .textarea:focus, .select:focus {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 3px rgba(185, 130, 52, 0.14);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 40px;
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .btn-primary {
+      background: var(--brown-2);
+      color: #fff;
+      box-shadow: 0 12px 24px rgba(47, 44, 39, 0.18);
+    }
+
+    .btn-soft {
+      border-color: var(--line);
+      background: #fbfaf7;
+      color: var(--brown);
+    }
+
+    .small {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fbfaf7;
+      color: var(--muted);
+      padding: 4px 9px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .material-drop {
+      display: grid;
+      place-items: center;
+      min-height: 90px;
+      border: 1px dashed var(--line-strong);
+      border-radius: var(--radius);
+      background: #fbfaf7;
+      color: var(--muted);
+      padding: 16px;
+      text-align: center;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .result-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      padding: 14px;
+    }
+
+    .result-card h3 {
+      margin: 0 0 9px;
+      font-size: 14px;
+    }
+
+    .result-card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .bottom-chat {
+      display: flex;
+      gap: 10px;
+      border-top: 1px solid var(--line);
+      background: #fbfaf7;
+      padding: 12px 14px;
+    }
+
+    .bottom-chat input {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      color: var(--ink);
+      font-size: 13px;
+      outline: none;
+    }
+
+    .icon-btn {
+      display: grid;
+      width: 40px;
+      height: 40px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      color: var(--brown);
+      font-weight: 900;
+    }
+
+    /* Template 1 */
+    .t1-body {
+      display: grid;
+      grid-template-columns: 290px minmax(430px, 1fr) 330px;
+      min-height: 720px;
+    }
+
+    .t1-nav {
+      border-right: 1px solid var(--line);
+      background: #fbfaf7;
+      padding: 16px;
+    }
+
+    .nav-title {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .need-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .need {
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 10px;
+      width: 100%;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      background: transparent;
+      padding: 10px;
+      text-align: left;
+      transition: 0.18s ease;
+    }
+
+    .need.active {
+      border-color: var(--line-strong);
+      background: #fff;
+      box-shadow: 0 10px 22px rgba(64, 55, 44, 0.07);
+    }
+
+    .need-code {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border-radius: var(--radius);
+      background: #ece7de;
+      color: var(--brown);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .need.active .need-code {
+      background: var(--brown-2);
+      color: #fff;
+    }
+
+    .need strong {
+      display: block;
+      color: var(--ink);
+      font-size: 13px;
+      line-height: 1.2;
+    }
+
+    .need span {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .t1-main {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      border-right: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .task-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      padding: 14px 16px;
+    }
+
+    .task-strip h2 {
+      margin: 0;
+      font-size: 19px;
+      line-height: 1.3;
+    }
+
+    .task-strip p {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .task-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      justify-content: flex-end;
+    }
+
+    .task-tab {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fbfaf7;
+      color: var(--muted);
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .task-tab.active {
+      border-color: var(--brown-2);
+      background: var(--brown-2);
+      color: #fff;
+    }
+
+    .material-panel {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+      padding: 16px;
+    }
+
+    .material-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .wide {
+      grid-column: 1 / -1;
+    }
+
+    .t1-result {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      background: #fbfaf7;
+      padding: 16px;
+    }
+
+    .result-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 14px;
+    }
+
+    .result-head h2 {
+      margin: 0;
+      font-size: 17px;
+    }
+
+    .output-list {
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      padding-top: 14px;
+    }
+
+    /* Template 2 */
+    .t2-body {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 720px;
+      background: #fff;
+    }
+
+    .t2-board-head {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 20px;
+      border-bottom: 1px solid var(--line);
+      padding: 20px;
+      background: #fbfaf7;
+    }
+
+    .t2-board-head h2 {
+      margin: 0;
+      font-size: 26px;
+      line-height: 1.25;
+    }
+
+    .t2-board-head p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .quick-fields {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .demand-board {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1px;
+      background: var(--line);
+    }
+
+    .demand-column {
+      display: grid;
+      align-content: start;
+      gap: 12px;
+      min-height: 360px;
+      background: #fff;
+      padding: 16px;
+    }
+
+    .demand-column header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 42px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 12px;
+    }
+
+    .demand-column h3 {
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .count {
+      color: var(--subtle);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .job-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fbfaf7;
+      padding: 13px;
+    }
+
+    .job-card strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .job-card p {
+      margin: 7px 0 12px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .job-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .mini-action {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--brown);
+      padding: 5px 8px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    /* Template 3 */
+    .t3-body {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 720px;
+      background: #fff;
+    }
+
+    .t3-rail {
+      border-right: 1px solid var(--line);
+      background: #2f2c27;
+      color: #fff;
+      padding: 18px;
+    }
+
+    .t3-rail h2 {
+      margin: 0;
+      font-size: 21px;
+      line-height: 1.3;
+    }
+
+    .t3-rail p {
+      margin: 8px 0 18px;
+      color: rgba(255, 255, 255, 0.66);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .wizard-step {
+      display: grid;
+      grid-template-columns: 30px 1fr;
+      gap: 10px;
+      border-radius: 10px;
+      padding: 10px;
+      color: rgba(255, 255, 255, 0.74);
+    }
+
+    .wizard-step.active {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+    }
+
+    .step-num {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      border-radius: 50%;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .wizard-step strong {
+      display: block;
+      font-size: 13px;
+    }
+
+    .wizard-step span {
+      display: block;
+      margin-top: 3px;
+      color: rgba(255, 255, 255, 0.55);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .t3-work {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-width: 0;
+    }
+
+    .t3-modebar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      padding: 16px 18px;
+      background: #fbfaf7;
+    }
+
+    .mode-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .mode-chip {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--muted);
+      padding: 7px 10px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .mode-chip.active {
+      border-color: var(--green);
+      background: #edf5f1;
+      color: var(--green);
+    }
+
+    .t3-content {
+      display: grid;
+      grid-template-columns: minmax(360px, 1fr) minmax(320px, 0.85fr);
+      gap: 1px;
+      background: var(--line);
+    }
+
+    .builder {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+      background: #fff;
+      padding: 18px;
+    }
+
+    .builder h2, .preview h2 {
+      margin: 0;
+      font-size: 19px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .preview {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+      background: #fbfaf7;
+      padding: 18px;
+    }
+
+    .deliverable {
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--gold);
+      border-radius: 10px;
+      background: #fff;
+      padding: 14px;
+    }
+
+    .deliverable strong {
+      display: block;
+      font-size: 14px;
+    }
+
+    .deliverable span {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .fixed-submit {
+      display: flex;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .fixed-submit .btn-primary {
+      flex: 1;
+    }
+
+    @media (max-width: 1100px) {
+      .topbar-inner {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .brand, .status {
+        min-width: 0;
+      }
+
+      .template-tabs {
+        justify-content: flex-start;
+        width: 100%;
+        overflow-x: auto;
+      }
+
+      .t1-body {
+        grid-template-columns: 260px 1fr;
+      }
+
+      .t1-result {
+        grid-column: 1 / -1;
+        border-top: 1px solid var(--line);
+      }
+
+      .t3-content {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 760px) {
+      .shell {
+        padding: 12px;
+      }
+
+      .screen-head {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .credit {
+        align-self: stretch;
+        text-align: center;
+      }
+
+      .t1-body, .t3-body {
+        grid-template-columns: 1fr;
+      }
+
+      .t1-nav, .t1-main, .t3-rail {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .need-list {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .need {
+        grid-template-columns: 1fr;
+      }
+
+      .material-grid, .t2-board-head, .quick-fields, .form-row {
+        grid-template-columns: 1fr;
+      }
+
+      .task-strip, .t3-modebar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .task-tabs {
+        justify-content: flex-start;
+      }
+
+      .demand-column {
+        min-height: auto;
+      }
+
+      .bottom-chat {
+        position: sticky;
+        bottom: 0;
+        z-index: 5;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <div class="brand-mark">鼎</div>
+          <div>
+            <p class="brand-title">青禾写作教学工作台</p>
+            <p class="brand-sub">按老师真实需求组织的三种工作模式</p>
+          </div>
+        </div>
+        <nav class="template-tabs" aria-label="工作模式切换">
+          <button class="tab active" data-template="template-1">任务配置</button>
+          <button class="tab" data-template="template-2">需求看板</button>
+          <button class="tab" data-template="template-3">交付向导</button>
+        </nav>
+        <div class="status"><span class="dot"></span> 底部聊天栏只做追问，不做主入口</div>
+      </div>
+    </header>
+
+    <main class="shell">
+      <section id="template-1" class="template active">
+        <div class="screen">
+          <header class="screen-head">
+            <div class="screen-title">
+              <button class="back" aria-label="返回">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <div>
+                <h1>任务配置</h1>
+                <p>适合已经知道要做哪件事的老师：先选任务，再填条件和材料。</p>
+              </div>
+            </div>
+            <div class="credit">本次生成 1 积分</div>
+          </header>
+
+          <div class="t1-body">
+            <aside class="t1-nav">
+              <p class="nav-title">需求分类</p>
+              <div class="need-list">
+                <button class="need active">
+                  <span class="need-code">批</span>
+                  <span><strong>作文批改</strong><span>单篇、二稿、一组共性问题</span></span>
+                </button>
+                <button class="need">
+                  <span class="need-code">讲</span>
+                  <span><strong>作文讲评</strong><span>讲评课、优秀文、问题文</span></span>
+                </button>
+                <button class="need">
+                  <span class="need-code">案</span>
+                  <span><strong>写作备课</strong><span>作文课、升格课、公开课</span></span>
+                </button>
+                <button class="need">
+                  <span class="need-code">件</span>
+                  <span><strong>课件讲义</strong><span>PPT 大纲、练习单、方法卡</span></span>
+                </button>
+                <button class="need">
+                  <span class="need-code">题</span>
+                  <span><strong>命题训练</strong><span>作文题、片段训练、月测</span></span>
+                </button>
+                <button class="need">
+                  <span class="need-code">材</span>
+                  <span><strong>素材积累</strong><span>事例、金句、主题表达</span></span>
+                </button>
+                <button class="need">
+                  <span class="need-code">研</span>
+                  <span><strong>教研运营</strong><span>课程体系、家长会、续班</span></span>
+                </button>
+              </div>
+            </aside>
+
+            <section class="t1-main">
+              <div class="task-strip">
+                <div>
+                  <h2>作文批改</h2>
+                  <p>材料区放右侧主工作区，不再挤进小侧栏。</p>
+                </div>
+                <div class="task-tabs">
+                  <button class="task-tab active">初稿</button>
+                  <button class="task-tab">二稿</button>
+                  <button class="task-tab">一组作文</button>
+                  <button class="task-tab">家长反馈</button>
+                </div>
+              </div>
+
+              <div class="material-panel">
+                <div class="material-grid">
+                  <label class="field">
+                    <span>年级</span>
+                    <small>结构化分类</small>
+                    <select class="select">
+                      <option>小学五年级</option>
+                      <option>初一</option>
+                      <option>初二</option>
+                      <option>初三</option>
+                      <option>高一</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>文体</span>
+                    <small>结构化分类</small>
+                    <select class="select">
+                      <option>记叙文</option>
+                      <option>议论文</option>
+                      <option>读后感</option>
+                      <option>材料作文</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>地区 / 考试口径</span>
+                    <small>自由表达，进入提示词</small>
+                    <input class="control" value="江苏南京" />
+                  </label>
+                  <label class="field">
+                    <span>学生水平</span>
+                    <small>结构化分类</small>
+                    <select class="select">
+                      <option>基础薄弱</option>
+                      <option>中等水平</option>
+                      <option>优秀冲高分</option>
+                      <option>差异较大</option>
+                    </select>
+                  </label>
+                  <label class="field wide">
+                    <span>学生情况补充</span>
+                    <small>自由表达，进入提示词</small>
+                    <input class="control" value="表达有亮点，但结构松，结尾容易喊口号。" />
+                  </label>
+                  <label class="field wide">
+                    <span>作文题 / 题干 / 材料</span>
+                    <small>自由表达，进入提示词</small>
+                    <textarea class="textarea">请以“那一刻，我长大了”为题写一篇不少于 600 字的记叙文。</textarea>
+                  </label>
+                  <label class="field wide">
+                    <span>学生作文正文</span>
+                    <small>自由表达，作为核心材料进入提示词</small>
+                    <textarea class="textarea" style="min-height: 190px;">那天晚上，我第一次发现妈妈也会累。她坐在餐桌旁，手里还拿着我的语文卷子，眼睛却快闭上了。我忽然不知道该说什么，只把那杯已经凉了的水重新倒掉，换了一杯热的放在她手边。</textarea>
+                  </label>
+                  <div class="wide material-drop">
+                    <div>
+                      <strong>附件材料槽</strong><br />
+                      上传 Word / PDF / 文本。图片扫描批改作为 2.0 能力，不混在当前入口里。
+                    </div>
+                  </div>
+                </div>
+                <button class="btn btn-primary">生成批改结果</button>
+              </div>
+            </section>
+
+            <aside class="t1-result">
+              <div class="result-head">
+                <div>
+                  <h2>输出契约</h2>
+                  <p class="small">按钮不是“发一句话”，而是触发固定交付结构。</p>
+                </div>
+                <span class="tag">固定输出结构</span>
+              </div>
+              <div class="output-list">
+                <article class="result-card">
+                  <h3>学生版反馈</h3>
+                  <p>只指出一个最大问题，给出下一稿能执行的修改任务。</p>
+                </article>
+                <article class="result-card">
+                  <h3>老师版判断</h3>
+                  <p>题意理解、结构问题、语言亮点、课堂讲评切入点。</p>
+                </article>
+                <article class="result-card">
+                  <h3>家长版沟通</h3>
+                  <p>不吓人、不夸空话，说明进步和一件家庭配合事项。</p>
+                </article>
+                <article class="result-card">
+                  <h3>二稿任务</h3>
+                  <p>保留原口吻，不替学生改写整篇，只给修改路线。</p>
+                </article>
+              </div>
+            </aside>
+          </div>
+
+          <div class="bottom-chat">
+            <button class="icon-btn" aria-label="附件">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M21 11.5l-8.7 8.7a6 6 0 01-8.5-8.5l9.1-9.1a4 4 0 115.7 5.7l-9.1 9.1a2 2 0 01-2.8-2.8l8.7-8.7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <input value="基于刚才结果继续追问，例如：把家长版说得更委婉一点" />
+            <button class="icon-btn" aria-label="发送">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section id="template-2" class="template">
+        <div class="screen">
+          <header class="screen-head">
+            <div class="screen-title">
+              <button class="back" aria-label="返回">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <div>
+                <h1>需求看板</h1>
+                <p>适合老师还没确定入口时：先从需求分类里找到今天要交付的东西。</p>
+              </div>
+            </div>
+            <div class="credit">剩余 10 分</div>
+          </header>
+
+          <div class="t2-body">
+            <section class="t2-board-head">
+              <div>
+                <h2>按老师的工作目的归类，不用并列词拼菜单。</h2>
+                <p>这是一张需求总表。老师先选分类，再进入对应任务：作文批改、作文讲评、写作备课、课件讲义、命题训练、素材积累、教研运营。</p>
+              </div>
+              <div class="quick-fields">
+                <label class="field">
+                  <span>默认年级</span>
+                  <select class="select"><option>初中</option><option>小学高段</option><option>高中</option></select>
+                </label>
+                <label class="field">
+                  <span>本次用途</span>
+                  <select class="select"><option>明天上课要用</option><option>发给家长</option><option>教研组内部</option></select>
+                </label>
+                <label class="field" style="grid-column: 1 / -1;">
+                  <span>本周主题</span>
+                  <input class="control" value="记叙文细节描写与结构升格" />
+                </label>
+              </div>
+            </section>
+
+            <section class="demand-board">
+              <div class="demand-column">
+                <header><h3>作文批改</h3><span class="count">6 项</span></header>
+                <article class="job-card">
+                  <strong>批一篇学生作文</strong>
+                  <p>生成学生、老师、家长三份反馈，带二稿任务。</p>
+                  <div class="job-actions"><button class="mini-action">初稿</button><button class="mini-action">二稿</button><button class="mini-action">家长版</button></div>
+                </article>
+                <article class="job-card">
+                  <strong>批一组作文</strong>
+                  <p>提炼共性问题，找讲评课的主线和样例。</p>
+                  <div class="job-actions"><button class="mini-action">共性问题</button><button class="mini-action">分层任务</button></div>
+                </article>
+                <article class="job-card">
+                  <strong>生成评语库</strong>
+                  <p>按水平分层，避免空泛夸奖和打击式批评。</p>
+                </article>
+              </div>
+
+              <div class="demand-column">
+                <header><h3>作文讲评</h3><span class="count">5 项</span></header>
+                <article class="job-card">
+                  <strong>讲评课设计</strong>
+                  <p>从一组作文里提炼主问题，安排课堂推进顺序。</p>
+                  <div class="job-actions"><button class="mini-action">优秀文</button><button class="mini-action">问题文</button></div>
+                </article>
+                <article class="job-card">
+                  <strong>现场升格示范</strong>
+                  <p>挑一段典型文字，示范如何保留原意并改出层次。</p>
+                </article>
+                <article class="job-card">
+                  <strong>板书设计</strong>
+                  <p>把本节讲评压成 3 个关键词，方便学生记住。</p>
+                </article>
+              </div>
+
+              <div class="demand-column">
+                <header><h3>写作备课</h3><span class="count">8 项</span></header>
+                <article class="job-card">
+                  <strong>课时教案</strong>
+                  <p>审题、立意、结构、语言、升格、讲评课都可拆。</p>
+                  <div class="job-actions"><button class="mini-action">45 分钟</button><button class="mini-action">公开课</button></div>
+                </article>
+                <article class="job-card">
+                  <strong>讲评课设计</strong>
+                  <p>优秀文怎么讲，问题文怎么改，板书怎么推进。</p>
+                </article>
+                <article class="job-card">
+                  <strong>逐字稿</strong>
+                  <p>给新老师、公开课或教研展示使用。</p>
+                </article>
+              </div>
+
+              <div class="demand-column">
+                <header><h3>课件讲义</h3><span class="count">6 项</span></header>
+                <article class="job-card">
+                  <strong>PPT 大纲</strong>
+                  <p>按页生成标题、讲法、学生任务和板书提示。</p>
+                  <div class="job-actions"><button class="mini-action">10 页</button><button class="mini-action">15 页</button></div>
+                </article>
+                <article class="job-card">
+                  <strong>学生讲义</strong>
+                  <p>方法讲解、例文片段、课堂练习、课后任务。</p>
+                </article>
+                <article class="job-card">
+                  <strong>方法卡</strong>
+                  <p>把写作方法压成学生能照着做的一页纸。</p>
+                </article>
+              </div>
+
+              <div class="demand-column">
+                <header><h3>命题训练</h3><span class="count">7 项</span></header>
+                <article class="job-card">
+                  <strong>作文题设计</strong>
+                  <p>按年级、主题、训练目标生成题目和写作提示。</p>
+                  <div class="job-actions"><button class="mini-action">周测</button><button class="mini-action">月考</button></div>
+                </article>
+                <article class="job-card">
+                  <strong>片段训练</strong>
+                  <p>审题、立意、开头、细节、结尾等专项练习。</p>
+                </article>
+                <article class="job-card">
+                  <strong>评分量表</strong>
+                  <p>给老师用的检查维度，不冒充官方阅卷标准。</p>
+                </article>
+              </div>
+
+              <div class="demand-column">
+                <header><h3>素材积累</h3><span class="count">7 项</span></header>
+                <article class="job-card">
+                  <strong>主题素材包</strong>
+                  <p>人物、事件、意象、金句、可迁移表达。</p>
+                  <div class="job-actions"><button class="mini-action">成长</button><button class="mini-action">责任</button><button class="mini-action">家国</button></div>
+                </article>
+                <article class="job-card">
+                  <strong>主题素材包</strong>
+                  <p>围绕一个主题生成可迁移素材和表达路径。</p>
+                </article>
+                <article class="job-card">
+                  <strong>素材使用课</strong>
+                  <p>教学生把素材写进作文，而不是背素材。</p>
+                </article>
+              </div>
+
+              <div class="demand-column">
+                <header><h3>教研运营</h3><span class="count">6 项</span></header>
+                <article class="job-card">
+                  <strong>课程体系</strong>
+                  <p>一个月、一期课、暑秋衔接的写作规划。</p>
+                  <div class="job-actions"><button class="mini-action">校区</button><button class="mini-action">教研组</button></div>
+                </article>
+                <article class="job-card">
+                  <strong>老师培训材料</strong>
+                  <p>给新老师讲清写作课怎么备、怎么讲、怎么批。</p>
+                </article>
+                <article class="job-card">
+                  <strong>家长会讲稿</strong>
+                  <p>解释作文能力、展示进步、自然引向续班。</p>
+                </article>
+              </div>
+            </section>
+          </div>
+
+          <div class="bottom-chat">
+            <button class="icon-btn" aria-label="附件">+</button>
+            <input value="看板选完任务后，这里只继续补充要求，不承担主输入。" />
+            <button class="icon-btn" aria-label="发送">→</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="template-3" class="template">
+        <div class="screen">
+          <header class="screen-head">
+            <div class="screen-title">
+              <button class="back" aria-label="返回">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <div>
+                <h1>交付向导</h1>
+                <p>适合教案、课件、讲义这类复杂交付：分步骤收集条件，避免一次填太多。</p>
+              </div>
+            </div>
+            <div class="credit">草稿不会扣积分</div>
+          </header>
+
+          <div class="t3-body">
+            <aside class="t3-rail">
+              <h2>交付向导</h2>
+              <p>把复杂任务拆成几步，降低老师填写负担，也让结果稳定。</p>
+              <div class="wizard-step active">
+                <span class="step-num">1</span>
+                <span><strong>确定交付物</strong><span>教案、课件、讲义、逐字稿</span></span>
+              </div>
+              <div class="wizard-step">
+                <span class="step-num">2</span>
+                <span><strong>填写课堂条件</strong><span>年级、时长、课型、学生问题</span></span>
+              </div>
+              <div class="wizard-step">
+                <span class="step-num">3</span>
+                <span><strong>放入材料</strong><span>作文题、样文、教材页、校区要求</span></span>
+              </div>
+              <div class="wizard-step">
+                <span class="step-num">4</span>
+                <span><strong>生成并微调</strong><span>右侧预览结构，底部继续追问</span></span>
+              </div>
+            </aside>
+
+            <section class="t3-work">
+              <div class="t3-modebar">
+                <div class="mode-chips">
+                  <button class="mode-chip active">作文课教案</button>
+                  <button class="mode-chip">PPT 大纲</button>
+                  <button class="mode-chip">学生讲义</button>
+                  <button class="mode-chip">逐字稿</button>
+                  <button class="mode-chip">训练题</button>
+                </div>
+                <button class="btn btn-soft">保存为校区模板</button>
+              </div>
+
+              <div class="t3-content">
+                <div class="builder">
+                  <h2>生成一节作文升格课</h2>
+                  <div class="form-row">
+                    <label class="field">
+                      <span>年级</span>
+                      <small>结构化分类</small>
+                      <select class="select"><option>初二</option><option>初一</option><option>初三</option></select>
+                    </label>
+                    <label class="field">
+                      <span>课时</span>
+                      <small>结构化分类</small>
+                      <select class="select"><option>90 分钟</option><option>45 分钟</option><option>120 分钟</option></select>
+                    </label>
+                  </div>
+                  <div class="form-row">
+                    <label class="field">
+                      <span>课型</span>
+                      <small>结构化分类</small>
+                      <select class="select"><option>结构升格课</option><option>审题立意课</option><option>语言细节课</option></select>
+                    </label>
+                    <label class="field">
+                      <span>课堂对象</span>
+                      <small>结构化分类</small>
+                      <select class="select"><option>基础班</option><option>常规班</option><option>培优班</option><option>混合班</option></select>
+                    </label>
+                  </div>
+                  <label class="field">
+                    <span>学生情况补充</span>
+                    <small>自由表达，进入提示词</small>
+                    <input class="control" value="多数学生能写完整事件，但不会写变化和心理转折。" />
+                  </label>
+                  <label class="field">
+                    <span>本节课目标</span>
+                    <small>自由表达，进入提示词</small>
+                    <input class="control" value="让学生把流水账改成有转折、有细节、有一句真心话的记叙文。" />
+                  </label>
+                  <label class="field">
+                    <span>学生常见问题</span>
+                    <small>自由表达，进入提示词</small>
+                    <textarea class="textarea">开头铺垫太长；事情写完了但没有变化；细节只有动作，没有心理；结尾喊口号。</textarea>
+                  </label>
+                  <label class="field">
+                    <span>作文题 / 样文 / 校区要求</span>
+                    <small>自由表达，进入提示词</small>
+                    <textarea class="textarea">题目：那一刻，我长大了。校区要求：要有课堂互动、现场修改、课后任务单。</textarea>
+                  </label>
+                  <div class="material-drop">
+                    <div><strong>材料袋</strong><br />可放优秀文、问题文、上次课堂反馈、教材页或校区模板。</div>
+                  </div>
+                  <div class="fixed-submit">
+                    <button class="btn btn-soft">预览结构</button>
+                    <button class="btn btn-primary">生成教案</button>
+                  </div>
+                </div>
+
+                <aside class="preview">
+                  <h2>将生成的交付包</h2>
+                  <article class="deliverable">
+                    <strong>一、课堂主线</strong>
+                    <span>从“事情发生了”推进到“人发生了变化”，用一个学生能懂的核心问题贯穿。</span>
+                  </article>
+                  <article class="deliverable">
+                    <strong>二、四段教学流程</strong>
+                    <span>导入、样文诊断、现场升格、迁移练习，每段带教师话术和学生任务。</span>
+                  </article>
+                  <article class="deliverable">
+                    <strong>三、板书与 PPT 大纲</strong>
+                    <span>板书保留 3 个关键词，PPT 只做课堂推进，不堆满理论。</span>
+                  </article>
+                  <article class="deliverable">
+                    <strong>四、课后修改任务单</strong>
+                    <span>学生回去只改一件事，老师下次能检查，不让任务失控。</span>
+                  </article>
+                </aside>
+              </div>
+            </section>
+          </div>
+
+          <div class="bottom-chat">
+            <button class="icon-btn" aria-label="附件">+</button>
+            <input value="生成后继续追问：把这节课改成公开课版本，增加互动环节。" />
+            <button class="icon-btn" aria-label="发送">→</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const tabs = Array.from(document.querySelectorAll('.tab'));
+    const templates = Array.from(document.querySelectorAll('.template'));
+
+    tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const id = tab.dataset.template;
+        tabs.forEach((item) => item.classList.toggle('active', item === tab));
+        templates.forEach((item) => item.classList.toggle('active', item.id === id));
+      });
+    });
+
+    document.querySelectorAll('.need').forEach((need) => {
+      need.addEventListener('click', () => {
+        document.querySelectorAll('.need').forEach((item) => item.classList.remove('active'));
+        need.classList.add('active');
+      });
+    });
+
+    document.querySelectorAll('.task-tab').forEach((task) => {
+      task.addEventListener('click', () => {
+        document.querySelectorAll('.task-tab').forEach((item) => item.classList.remove('active'));
+        task.classList.add('active');
+      });
+    });
+
+    document.querySelectorAll('.mode-chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('.mode-chip').forEach((item) => item.classList.remove('active'));
+        chip.classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>

@@ -16,25 +16,20 @@ export default function HomePage({ userId, nickname, onOpenExperts, onOpenCredit
       <NavBar userId={userId} nickname={nickname} onOpenHome={() => {}} onOpenExperts={onOpenExperts} onOpenCredits={onOpenCredits} onLogout={onLogout} />
 
       <main className="flex min-h-[calc(100svh-56px)] flex-col items-center justify-center px-5">
-        <p className="text-[11px] font-medium tracking-[0.12em] text-stone-400">AIBrain / 智脑</p>
+        <p className="text-[11px] font-medium tracking-[0.12em] text-stone-400">AIBrain</p>
         <h1 className="mt-4 text-center text-[clamp(22px,4vw,32px)] font-semibold leading-tight text-stone-950">
-          把问题交代清楚，让智脑给出有用的判断
+          让思考成为作品
         </h1>
+        <p className="mt-3 max-w-[520px] text-center text-sm leading-6 text-stone-500">
+          汇集专业判断的 AI 专家矩阵
+        </p>
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <button
             onClick={guest ? onOpenRegister : onOpenExperts}
             className="rounded bg-[#2f251d] px-5 py-2.5 text-sm font-medium text-white transition hover:bg-[#4a3728]"
           >
-            {guest ? '免费注册' : '进入智脑'}
+            打开新世界
           </button>
-          {guest && (
-            <button
-              onClick={onOpenExperts}
-              className="rounded border border-black/10 px-5 py-2.5 text-sm font-medium text-stone-700 transition hover:border-[#2f251d]/40 hover:bg-[#faf8f4]"
-            >
-              先看看
-            </button>
-          )}
         </div>
       </main>
     </div>

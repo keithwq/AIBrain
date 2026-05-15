@@ -41,7 +41,7 @@ function clearSession() {
 
 function App() {
   const session = loadSession();
-  const [view, setView] = useState<View>({ page: 'home' });
+  const [view, setView] = useState<View>(() => (session ? { page: 'experts' } : { page: 'home' }));
   const [userId, setUserId] = useState(() => session?.userId || '');
   const [nickname, setNickname] = useState(() => session?.nickname || '');
   const [token, setToken] = useState(() => session?.token || '');
@@ -52,7 +52,7 @@ function App() {
     setUserId(uid);
     setNickname(nick);
     setToken(tok);
-    setView({ page: 'home' });
+    setView({ page: 'experts' });
   };
 
   useEffect(() => {
@@ -68,10 +68,6 @@ function App() {
     window.addEventListener('message', handleWechatMessage);
 
     const params = new URLSearchParams(window.location.search);
-    const rawHiddenExpert = params.get('hidden_expert');
-    if (rawHiddenExpert) {
-      setHiddenExpertId(rawHiddenExpert);
-    }
     const rawWechatLogin = params.get('wechat_login');
     let loginTimer: number | undefined;
     if (rawWechatLogin) {

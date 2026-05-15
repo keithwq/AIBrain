@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { useMemo, useState, type ReactNode } from 'react';
 
 interface Props {

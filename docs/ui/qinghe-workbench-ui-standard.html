@@ -1,0 +1,202 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>青禾工作台 UI 标准</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #f7f4ee;
+      color: #1c1a17;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+      letter-spacing: 0;
+    }
+    .shell { height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      border-bottom: 1px solid #e4dacb;
+      background: rgba(255, 250, 242, .86);
+    }
+    .nav { border: 1px solid #dfd3c1; background: #fff; border-radius: 999px; padding: 8px 12px; font-size: 12px; font-weight: 600; color: #5f554a; }
+    .brand { flex: 1; min-width: 0; }
+    .brand h1 { margin: 0; font-size: 16px; font-weight: 650; }
+    .brand p { margin: 2px 0 0; font-size: 12px; color: #81776d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .layout {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 292px minmax(0, 1fr) 292px;
+      gap: 12px;
+      padding: 12px;
+      max-width: 1440px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    .panel {
+      min-height: 0;
+      overflow: hidden;
+      border: 1px solid #e4dacb;
+      border-radius: 22px;
+      background: rgba(255, 250, 242, .88);
+      box-shadow: 0 14px 36px rgba(80, 64, 42, .06);
+    }
+    .panel-head { padding: 12px; border-bottom: 1px solid #e4dacb; }
+    .panel-head h2 { margin: 0; font-size: 15px; font-weight: 650; }
+    .panel-head p { margin: 3px 0 0; font-size: 12px; color: #81776d; }
+    .scroll { min-height: 0; height: 100%; overflow: auto; padding: 12px; }
+    .task-group { border: 1px solid #eadfce; border-radius: 18px; background: #fff; padding: 8px; margin-bottom: 8px; }
+    .task-main { border-radius: 14px; padding: 8px 10px; background: #f8f4ed; font-size: 13px; font-weight: 650; }
+    .task-main.active { background: #2f251d; color: #fff; }
+    .task-main span { display: block; margin-top: 3px; font-size: 11px; line-height: 1.45; font-weight: 400; opacity: .72; }
+    .task-sub { margin-top: 6px; border-radius: 12px; padding: 7px 10px; font-size: 12px; line-height: 1.45; color: #655d55; }
+    .task-sub.active { background: #f0e4d3; color: #5c3d24; font-weight: 650; }
+    .work {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      background: #fff;
+    }
+    .work-head { padding: 14px 16px; border-bottom: 1px solid #e4dacb; }
+    .work-head .path { font-size: 11px; font-weight: 650; color: #8a5a35; }
+    .work-head h2 { margin: 4px 0 0; font-size: 18px; font-weight: 650; }
+    .work-head p { margin: 4px 0 0; max-width: 720px; font-size: 12px; line-height: 1.7; color: #81776d; }
+    .workspace { min-height: 0; overflow: auto; background: #fbf8f2; padding: 12px; }
+    .blank {
+      min-height: 420px;
+      height: 100%;
+      display: grid;
+      place-items: center;
+      border: 1px dashed #eadfce;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, .55);
+      text-align: center;
+      padding: 32px;
+    }
+    .blank strong { display: block; font-size: 13px; color: #78716a; }
+    .blank p { margin: 8px auto 0; max-width: 420px; color: #a09a93; font-size: 12px; line-height: 1.8; }
+    .chips { margin-top: 18px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+    .chip { border: 1px solid #eadfce; background: rgba(255, 255, 255, .8); border-radius: 999px; padding: 6px 10px; color: #70675f; font-size: 11px; font-weight: 650; }
+    .composer { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px; padding: 10px; border-top: 1px solid #e4dacb; background: #fff; }
+    .icon, .send { width: 40px; height: 40px; border-radius: 12px; border: 1px solid #d8cdbd; background: #fff; }
+    .send { background: #1f1c19; color: #fff; border: 0; }
+    .input { border: 1px solid #d8cdbd; border-radius: 12px; padding: 0 12px; color: #9b938b; font-size: 13px; display: flex; align-items: center; }
+    .primary { border: 0; border-radius: 12px; background: #2f251d; color: #fff; padding: 0 14px; font-size: 13px; font-weight: 650; }
+    .material-card { border: 1px solid #eadfce; border-radius: 18px; background: #fff; padding: 12px; margin-bottom: 10px; }
+    .material-card h3 { margin: 0; font-size: 13px; font-weight: 650; }
+    .material-card p { margin: 6px 0 0; font-size: 12px; color: #81776d; line-height: 1.6; }
+    textarea, input { width: 100%; border: 1px solid #eadfce; border-radius: 12px; background: #fffdf8; padding: 8px 10px; font: inherit; font-size: 12px; color: #504942; outline: 0; }
+    textarea { min-height: 108px; resize: none; line-height: 1.6; }
+    .collapsed {
+      display: grid;
+      place-items: center;
+      writing-mode: vertical-rl;
+      color: #696057;
+      font-size: 12px;
+      font-weight: 650;
+      background: #fffaf2;
+    }
+    @media (max-width: 980px) {
+      .layout { grid-template-columns: 1fr; height: auto; }
+      .shell { height: auto; min-height: 100vh; }
+      .panel { min-height: 360px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <button class="nav">返回</button>
+      <button class="nav">首页</button>
+      <div class="brand">
+        <h1>青禾写作教学工作台</h1>
+        <p>任务树定方向，材料库供依据，中间生成成品与青禾意见。</p>
+      </div>
+      <button class="nav">收起材料库</button>
+      <button class="nav">积分</button>
+    </header>
+
+    <main class="layout">
+      <aside class="panel">
+        <div class="panel-head">
+          <h2>任务树</h2>
+          <p>素材、讲义、说课稿，一次生成可交付版本</p>
+        </div>
+        <div class="scroll">
+          <div class="task-group">
+            <div class="task-main active">批改评讲<span>批改、讲评、课后沟通都先过青禾写作法</span></div>
+            <div class="task-sub active">青禾快批<br />一篇作文，先找种籽句，再落下一刀</div>
+            <div class="task-sub">讲评课<br />把共性问题讲成一节能落地的课</div>
+            <div class="task-sub">课后沟通<br />把批改结果整理成家长和学生看得懂的话</div>
+          </div>
+          <div class="task-group">
+            <div class="task-main">写作教学<span>素材、讲义、说课稿、教案与资料诊改</span></div>
+            <div class="task-sub">整理教案</div>
+            <div class="task-sub">素材讲义说课</div>
+            <div class="task-sub">资料诊改</div>
+          </div>
+          <div class="material-card">
+            <h3>公共背景</h3>
+            <p>初二小班，最近训练细节描写。</p>
+          </div>
+        </div>
+      </aside>
+
+      <section class="panel work">
+        <div class="work-head">
+          <div class="path">写作教学 / 素材讲义说课</div>
+          <h2>素材、讲义、说课稿，一次生成可交付版本</h2>
+          <p>先定本课一刀、材料抓手和学生动作，再生成老师能上课、能提交、能发出的版本。</p>
+        </div>
+        <div class="workspace">
+          <div class="blank">
+            <div>
+              <strong>工作区空白</strong>
+              <p>在左侧选择任务，在右侧放入作文、教案、讲义、说课稿或素材。开始后，这里会显示青禾生成的成品和修改意见。</p>
+              <div class="chips">
+                <span class="chip">快批作文</span>
+                <span class="chip">生成讲评课</span>
+                <span class="chip">素材讲义说课</span>
+                <span class="chip">资料诊改</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="composer">
+          <button class="icon">+</button>
+          <div class="input">补充要求，也可以只发附件</div>
+          <button class="primary">生成教学成品</button>
+          <button class="send">→</button>
+        </div>
+      </section>
+
+      <aside class="panel">
+        <div class="panel-head">
+          <h2>材料库</h2>
+          <p>按业务场景随时收起</p>
+        </div>
+        <div class="scroll">
+          <div class="material-card">
+            <h3>添加材料</h3>
+            <p>作文、教案、讲义、说课稿、素材包</p>
+          </div>
+          <div class="material-card">
+            <h3>本次材料</h3>
+            <p>还没有粘贴材料，可直接上传文件或在下方输入。</p>
+          </div>
+          <div class="material-card">
+            <h3>老师已有资料</h3>
+            <textarea placeholder="粘贴教案、讲义、说课稿或作文内容。"></textarea>
+          </div>
+          <div class="material-card">
+            <h3>使用场景</h3>
+            <input placeholder="例如：40 分钟课、赛课说课、机构小班" />
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+</body>
+</html>

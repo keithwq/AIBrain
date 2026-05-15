@@ -8,26 +8,26 @@
 export const EXPERT_CATEGORIES: ExpertCategory[] = [
   {
     id: 'education',
-    name: '����ѧϰ',
-    description: '���� / ��ѧ / ��ѧ / ���',
+    name: '教育学习',
+    description: '作文 / 教学 / 升学 / 诗词',
     expertIds: ['qinghe-xiezuo', 'yunqiao-jiaoxue', 'songyue-shici', 'zhiyuan-laoshi'],
   },
   {
     id: 'family',
-    name: '��ͥ����',
-    description: '��ͥ���� / ���� / ״̬���� / ��ͨ����',
+    name: '家庭关系',
+    description: '家庭教育 / 关系 / 状态整理 / 沟通文本',
     expertIds: ['muhe-laoshi', 'anran-laoshi'],
   },
   {
     id: 'business',
-    name: '��ҵְ��',
-    description: 'ս�� / Ӫ�� / ��Ʒ / �Ϲ�',
+    name: '商业职场',
+    description: '战略 / 营销 / 产品 / 合规',
     expertIds: ['mingfeng-guwen', 'lishi-sir', 'mingheng-fawu'],
   },
   {
     id: 'health',
-    name: '����',
-    description: '��ҽ���� / ������Ϣ���� / ҽѧ��ͨ',
+    name: '健康养生',
+    description: '中医养生 / 健康信息整理 / 医学沟通',
     expertIds: ['songbai-xiansheng'],
   },
 ];

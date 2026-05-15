@@ -24,6 +24,10 @@ interface Message {
   attachments?: Attachment[];
 }
 
+function pickClassicFormulaName(): string {
+  return CLASSIC_FORMULAS[Math.floor(Math.random() * CLASSIC_FORMULAS.length)];
+}
+
 interface Props {
   messages: Message[];
   messagesLoading: boolean;
@@ -144,7 +148,7 @@ export function SongbaiXianshengWorkbench({
   };
 
   const handleFormulaRandom = () => {
-    const name = CLASSIC_FORMULAS[Math.floor(Math.random() * CLASSIC_FORMULAS.length)];
+    const name = pickClassicFormulaName();
     sendWorkspaceText(`${task.prompt}\n\n方剂名称：${name}`);
   };
 

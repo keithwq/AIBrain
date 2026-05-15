@@ -41,7 +41,7 @@ export default function NavBar({ userId, nickname, onOpenHome, onOpenExperts, on
             </>
           ) : (
             <button onClick={onOpenExperts} className="hidden rounded-full bg-[#2f251d] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#4a3728] md:block">
-              登录
+              打开新世界
             </button>
           )}
 

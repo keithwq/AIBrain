@@ -1,0 +1,579 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>松柏先生养生学习工作台截图</title>
+  <style>
+    :root {
+      --ink: #273229;
+      --muted: #6f786c;
+      --paper: #fbf7ed;
+      --panel: #fffdf7;
+      --line: #e6dcc9;
+      --moss: #365b3a;
+      --moss-2: #587c50;
+      --tea: #b78343;
+      --herb: #d9e7cf;
+      --rice: #f5ead7;
+      --warn: #8a3f2b;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #efe6d5;
+      color: var(--ink);
+      font-family: "Noto Serif SC", "Songti SC", "Microsoft YaHei", serif;
+    }
+
+    .canvas {
+      width: 3000px;
+      min-height: 1320px;
+      padding: 34px;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,.35) 1px, transparent 1px) 0 0 / 34px 34px,
+        linear-gradient(180deg, #f8f0e3 0%, #edf3e7 100%);
+    }
+
+    .titlebar {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      padding: 0 4px;
+    }
+
+    .titlebar h1 {
+      margin: 0;
+      font-size: 34px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .titlebar p {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.7;
+    }
+
+    .seal {
+      border: 1px solid rgba(138, 63, 43, .42);
+      color: var(--warn);
+      padding: 10px 14px;
+      font-size: 15px;
+      background: rgba(255,253,247,.72);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 22px;
+    }
+
+    .shot {
+      overflow: hidden;
+      height: 1120px;
+      border: 1px solid rgba(64, 75, 56, .16);
+      border-radius: 8px;
+      background: var(--paper);
+      box-shadow: 0 22px 52px rgba(61, 47, 31, .14);
+    }
+
+    .top {
+      height: 86px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,253,247,.86);
+    }
+
+    .avatar {
+      display: grid;
+      place-items: center;
+      width: 54px;
+      height: 54px;
+      border-radius: 8px;
+      background: #2f4f32;
+      color: #f8ead1;
+      font-size: 24px;
+      font-weight: 700;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.22);
+    }
+
+    .top h2 {
+      margin: 0;
+      font-size: 21px;
+      font-weight: 700;
+    }
+
+    .top p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .workbench {
+      display: grid;
+      grid-template-columns: 210px 1fr 260px;
+      gap: 14px;
+      height: calc(100% - 86px);
+      padding: 14px;
+    }
+
+    .rail,
+    .library,
+    .main {
+      min-height: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,253,247,.72);
+    }
+
+    .rail,
+    .library {
+      padding: 12px;
+    }
+
+    .label {
+      margin: 0 0 10px;
+      color: var(--moss);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .task {
+      display: block;
+      width: 100%;
+      margin-bottom: 9px;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      padding: 9px;
+      background: #f6efe2;
+      color: var(--ink);
+      text-align: left;
+      font: inherit;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .task.active {
+      border-color: rgba(54, 91, 58, .22);
+      background: var(--moss);
+      color: #fff7e8;
+    }
+
+    .task small {
+      display: block;
+      margin-top: 4px;
+      opacity: .7;
+      font-size: 11px;
+    }
+
+    .main {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      overflow: hidden;
+      background: var(--panel);
+    }
+
+    .main-head {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,253,247,.98), rgba(250,246,236,.82));
+    }
+
+    .main-head .crumb {
+      color: var(--tea);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .main-head h3 {
+      margin: 6px 0 6px;
+      font-size: 22px;
+      font-weight: 700;
+    }
+
+    .main-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .workspace {
+      overflow: hidden;
+      padding: 16px;
+      background:
+        linear-gradient(0deg, rgba(246,239,226,.55), rgba(246,239,226,.55)),
+        var(--panel);
+    }
+
+    .empty {
+      height: 100%;
+      display: grid;
+      place-items: center;
+      border: 1px dashed #d7c8af;
+      border-radius: 8px;
+      background: rgba(255,255,255,.58);
+      text-align: center;
+      padding: 26px;
+    }
+
+    .empty strong {
+      display: block;
+      margin-bottom: 8px;
+      color: #43523f;
+      font-size: 16px;
+    }
+
+    .empty span {
+      color: #85887b;
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    .answer {
+      display: grid;
+      gap: 12px;
+    }
+
+    .block {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,253,247,.9);
+      padding: 12px;
+    }
+
+    .block h4 {
+      margin: 0 0 8px;
+      color: var(--moss);
+      font-size: 15px;
+    }
+
+    .block p,
+    .block li {
+      color: #495045;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .block p {
+      margin: 0;
+    }
+
+    .block ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .table th,
+    .table td {
+      border: 1px solid #e7dcc8;
+      padding: 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .table th {
+      background: #f2eadc;
+      color: #49523f;
+    }
+
+    .composer {
+      display: flex;
+      gap: 8px;
+      padding: 11px;
+      border-top: 1px solid var(--line);
+      background: rgba(255,253,247,.95);
+    }
+
+    .composer input {
+      flex: 1;
+      height: 38px;
+      border: 1px solid #d9cab2;
+      border-radius: 7px;
+      background: #fffdf7;
+      padding: 0 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .composer button {
+      border: 0;
+      border-radius: 7px;
+      background: var(--moss);
+      color: white;
+      padding: 0 14px;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .field {
+      margin-bottom: 12px;
+    }
+
+    .field span {
+      display: block;
+      margin-bottom: 5px;
+      color: #4b5548;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .input,
+    .textarea {
+      width: 100%;
+      border: 1px solid #d9cab2;
+      border-radius: 7px;
+      background: #fffdf7;
+      color: #7a7d71;
+      font-size: 12px;
+      line-height: 1.55;
+      padding: 8px;
+    }
+
+    .input {
+      height: 34px;
+    }
+
+    .textarea {
+      min-height: 82px;
+    }
+
+    .note {
+      border-left: 3px solid var(--tea);
+      background: #fbf1df;
+      padding: 9px;
+      color: #725337;
+      font-size: 12px;
+      line-height: 1.65;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .chip {
+      border: 1px solid #d8c8ad;
+      border-radius: 999px;
+      background: #fffaf1;
+      padding: 5px 8px;
+      color: #58624f;
+      font-size: 11px;
+    }
+
+    .recipe {
+      display: grid;
+      grid-template-columns: 70px 1fr;
+      gap: 10px;
+      align-items: center;
+      margin-top: 8px;
+    }
+
+    .bowl {
+      display: grid;
+      place-items: center;
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 50% 35%, #fff8e7 0 26%, #d7b06d 27% 45%, #85572e 46% 100%);
+      color: #fff8e7;
+      font-size: 20px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <div class="canvas">
+    <div class="titlebar">
+      <div>
+        <h1>松柏先生 · 中医养生学习工作台</h1>
+        <p>预览稿：不做诊断开方，聚焦体质认知、药食同源学习、家庭健康食谱。</p>
+      </div>
+      <div class="seal">合规边界：健康教育与日常保健，不替代医生诊疗</div>
+    </div>
+
+    <div class="grid">
+      <section class="shot">
+        <div class="top">
+          <div class="avatar">金</div>
+          <div>
+            <h2>松柏先生</h2>
+            <p>体质认知 · 四季调养 · 日常起居</p>
+          </div>
+        </div>
+        <div class="workbench">
+          <aside class="rail">
+            <p class="label">任务树</p>
+            <button class="task active">体质自查学习<small>先看倾向，不贴标签</small></button>
+            <button class="task">四季起居提醒<small>顺时而养</small></button>
+            <button class="task">家庭保健知识<small>讲清原理和边界</small></button>
+            <button class="task">就医提醒清单<small>异常情况及时就医</small></button>
+          </aside>
+          <main class="main">
+            <div class="main-head">
+              <div class="crumb">体质认知 / 非诊疗版</div>
+              <h3>把近期状态整理成体质学习卡</h3>
+              <p>只做中医知识学习与日常观察，不输出疾病判断、药方、剂量或治疗建议。</p>
+            </div>
+            <div class="workspace">
+              <div class="empty">
+                <div>
+                  <strong>工作区空白</strong>
+                  <span>先在右侧填睡眠、饮食、怕冷怕热、精神状态。开始后这里生成“体质倾向学习卡”和生活观察建议。</span>
+                </div>
+              </div>
+            </div>
+            <div class="composer">
+              <input value="补充：最近午后容易困，晚饭后胀，想先了解体质倾向" />
+              <button>生成学习卡</button>
+            </div>
+          </main>
+          <aside class="library">
+            <p class="label">材料库</p>
+            <div class="field"><span>年龄段</span><div class="input">35-45 岁</div></div>
+            <div class="field"><span>近期状态</span><div class="textarea">睡眠浅，下午乏力；饭后易胀；没有发热、剧痛、便血等急症表现。</div></div>
+            <div class="field"><span>想了解</span><div class="input">脾胃与湿气相关知识</div></div>
+            <div class="note">出现持续疼痛、明显消瘦、出血、胸闷气短等情况，界面只提示正规就医。</div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="shot">
+        <div class="top">
+          <div class="avatar">金</div>
+          <div>
+            <h2>松柏先生</h2>
+            <p>药食同源 · 食材识别 · 家庭餐桌</p>
+          </div>
+        </div>
+        <div class="workbench">
+          <aside class="rail">
+            <p class="label">任务树</p>
+            <button class="task">体质自查学习<small>先看倾向</small></button>
+            <button class="task active">药食同源学习<small>食材、禁忌、搭配</small></button>
+            <button class="task">食材替换<small>按家庭库存改</small></button>
+            <button class="task">一页知识卡<small>给家人看</small></button>
+          </aside>
+          <main class="main">
+            <div class="main-head">
+              <div class="crumb">药食同源 / 食材知识</div>
+              <h3>莲子、山药、百合怎么放进一周餐桌</h3>
+              <p>讲清性味归经、适合场景、普通家庭做法与注意事项，避免“治病式”表达。</p>
+            </div>
+            <div class="workspace">
+              <div class="answer">
+                <div class="block">
+                  <h4>本次判断</h4>
+                  <p>这组食材更适合做“清淡、温和、可坚持”的日常餐桌学习，不建议包装成治疗失眠、治疗脾虚的方案。</p>
+                </div>
+                <div class="block">
+                  <h4>食材学习表</h4>
+                  <table class="table">
+                    <tr><th>食材</th><th>日常理解</th><th>家庭做法</th></tr>
+                    <tr><td>山药</td><td>偏平和，常用于粥、蒸菜</td><td>山药小米粥、清蒸山药</td></tr>
+                    <tr><td>莲子</td><td>口感粉糯，适合少量入甜汤</td><td>莲子百合银耳羹</td></tr>
+                    <tr><td>百合</td><td>偏清润，适合秋燥食养</td><td>百合雪梨汤</td></tr>
+                  </table>
+                </div>
+                <div class="block">
+                  <h4>边界提醒</h4>
+                  <ul>
+                    <li>糖尿病、肾病、孕期、儿童长期食用前先问医生。</li>
+                    <li>不提供药材剂量，不建议自行抓药。</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            <div class="composer">
+              <input value="帮我把这张知识卡改成给爸妈看的版本" />
+              <button>继续整理</button>
+            </div>
+          </main>
+          <aside class="library">
+            <p class="label">材料库</p>
+            <div class="field"><span>食材</span><div class="textarea">山药、莲子、百合、银耳、小米、雪梨</div></div>
+            <div class="field"><span>家庭限制</span><div class="textarea">老人牙口一般；不想太甜；晚餐要清淡。</div></div>
+            <div class="field"><span>输出</span><div class="input">一页知识卡 + 3 道菜</div></div>
+            <div class="chips">
+              <span class="chip">少糖</span><span class="chip">清淡</span><span class="chip">易消化</span><span class="chip">家常</span>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="shot">
+        <div class="top">
+          <div class="avatar">金</div>
+          <div>
+            <h2>松柏先生</h2>
+            <p>每日健康食谱 · 定制家庭菜谱</p>
+          </div>
+        </div>
+        <div class="workbench">
+          <aside class="rail">
+            <p class="label">任务树</p>
+            <button class="task">体质自查学习<small>观察与记录</small></button>
+            <button class="task">药食同源学习<small>食材知识</small></button>
+            <button class="task active">每日健康食谱<small>一日三餐</small></button>
+            <button class="task">定制个人食谱<small>按口味和库存</small></button>
+          </aside>
+          <main class="main">
+            <div class="main-head">
+              <div class="crumb">家庭菜谱 / 今日版</div>
+              <h3>生成温和清淡的一日三餐</h3>
+              <p>以普通食材、合理搭配和可执行做法为主，不承诺调理疾病，不替代营养师或医生。</p>
+            </div>
+            <div class="workspace">
+              <div class="answer">
+                <div class="block">
+                  <h4>今日餐桌主线</h4>
+                  <p>少油、温热、不过甜；主食粗细搭配，晚餐减轻负担。把“养生感”藏进家常菜里。</p>
+                </div>
+                <div class="block">
+                  <h4>一日食谱</h4>
+                  <div class="recipe"><div class="bowl">早</div><p>小米南瓜粥 + 蒸山药 + 水煮蛋。口味淡，适合早上不想吃重的人。</p></div>
+                  <div class="recipe"><div class="bowl">午</div><p>香菇鸡丝面 + 清炒小白菜。保证蛋白质，汤面不过油。</p></div>
+                  <div class="recipe"><div class="bowl">晚</div><p>莲子百合银耳羹少糖版 + 清蒸鲈鱼 + 焯拌菠菜。</p></div>
+                </div>
+                <div class="block">
+                  <h4>采购清单</h4>
+                  <p>小米、南瓜、山药、鸡胸肉、香菇、小白菜、百合、银耳、鲈鱼、菠菜。</p>
+                </div>
+              </div>
+            </div>
+            <div class="composer">
+              <input value="把晚餐改成 20 分钟内能做完，家里没有鲈鱼" />
+              <button>改菜谱</button>
+            </div>
+          </main>
+          <aside class="library">
+            <p class="label">材料库</p>
+            <div class="field"><span>人数</span><div class="input">2 位成人 + 1 位老人</div></div>
+            <div class="field"><span>偏好</span><div class="textarea">不吃辣；晚餐希望清淡；家里有小米、山药、鸡蛋、菠菜。</div></div>
+            <div class="field"><span>禁忌</span><div class="textarea">不按疾病开菜单；慢病、孕期、儿童特殊饮食需走医生或营养师建议。</div></div>
+            <div class="note">输出只给家庭餐桌建议，避免“调某病、补某证、替代治疗”等表述。</div>
+          </aside>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

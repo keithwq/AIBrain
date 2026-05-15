@@ -1006,8 +1006,9 @@ export function buildQingheWritingMessage(
   workbench: WorkbenchValues,
   userText: string,
   methodNote: string,
-  _outputFallback: string,
+  outputFallback: string,
 ): string {
+  void outputFallback;
   const c = dispatchSub(taskId, sub);
   const task = getQingheWritingTask(taskId);
   const subDef = task.subOptions?.find(s => s.id === sub);
@@ -1064,9 +1065,12 @@ export function buildQingheWritingMessage(
 }
 
 export function validateQingheWritingInput(
-  _taskId: QingheWritingTaskId,
-  _sub: string,
-  _workbench: WorkbenchValues,
+  taskId: QingheWritingTaskId,
+  sub: string,
+  workbench: WorkbenchValues,
 ): string | null {
+  void taskId;
+  void sub;
+  void workbench;
   return null;
 }
